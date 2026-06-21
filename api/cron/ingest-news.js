@@ -1,8 +1,8 @@
 // api/cron/ingest-news.js
 //
-// Roda a cada 6h (configurado em vercel.json).
+// Roda 1x/dia (configurado em vercel.json).
 // Fluxo: busca na tabela `fontes` os portais sem rss_url próprio cujo domínio
-// está na allowlist do /api/feed -> chama /api/feed para cada um -> parseia
+// está na allowlist do /api/feed -> chama o feed generator no Manus -> parseia
 // o XML RSS retornado -> insere em `noticias` no Supabase (ignorando
 // duplicados por url_original).
 //
@@ -13,16 +13,13 @@
 //           relevancia, grupo_duplicidade, processado_ia, created_at
 //
 // ⚠️ Para o "ignore-duplicates" funcionar, `noticias.url_original` precisa
-// ter uma constraint UNIQUE no Supabase. Rode antes, se ainda não existir:
-//   ALTER TABLE noticias ADD CONSTRAINT noticias_url_original_key UNIQUE (url_original);
+// ter uma constraint UNIQUE no Supabase.
 
 import { XMLParser } from "fast-xml-parser";
 
-// --- Configuração que pode precisar de ajuste ---
 const NOTICIAS_TABLE = "noticias";
 const FONTES_TABLE = "fontes";
 
-// Domínios cobertos pelo /api/feed (scraping HTML / RSS gerado)
 const ALLOWLIST_DOMAINS = [
   "g1.globo.com",
   "noticias.r7.com",
@@ -36,18 +33,13 @@ const ALLOWLIST_DOMAINS = [
 ];
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // precisa ser a service_role key para insert/upsert
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const FEED_API_KEY = process.env.FEED_API_KEY;
-const CRON_SECRET = process.env.CRON_SECRET; // opcional, recomendado
+const CRON_SECRET = process.env.CRON_SECRET;
 
-function getOwnFeedBaseUrl(req) {
-  // Em produção, VERCEL_URL é o domínio do deployment atual
-  const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `https://${req.headers.host}`;
-  return host;
-}
+const FEED_GENERATOR_BASE_URL = "https://rssgenfix-7qjtnnnf.manus.space";
 
 async function fetchFontesAtivas() {
-  // Colunas reais da tabela `fontes`: id, nome, url, rss_url, regiao, ativo, status
   const url = `${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?select=id,nome,url,rss_url,regiao,ativo&ativo=eq.true`;
   const res = await fetch(url, {
     headers: {
@@ -58,9 +50,8 @@ async function fetchFontesAtivas() {
   if (!res.ok) throw new Error(`Falha ao buscar fontes: ${res.status}`);
   const fontes = await res.json();
 
-  // Só fontes sem rss_url próprio (precisam do fallback) E cujo domínio está na allowlist do /api/feed
   return fontes.filter((f) => {
-    if (f.rss_url) return false; // já tem RSS nativo, não precisa do scraping
+    if (f.rss_url) return false;
     if (!f.url) return false;
     let dominio;
     try {
@@ -72,11 +63,11 @@ async function fetchFontesAtivas() {
   });
 }
 
-async function fetchFeedXml(baseUrl, sourceUrl) {
-  const feedUrl = `${baseUrl}/api/feed?url=${encodeURIComponent(sourceUrl)}&key=${FEED_API_KEY}`;
+async function fetchFeedXml(sourceUrl) {
+  const feedUrl = `${FEED_GENERATOR_BASE_URL}/api/feed?url=${encodeURIComponent(sourceUrl)}&key=${FEED_API_KEY}`;
   const res = await fetch(feedUrl);
   if (!res.ok) {
-    console.error(`Erro ao buscar feed de ${sourceUrl}: ${res.status}`);
+    console.error(`Erro ao buscar feed de ${sourceUrl}: ${res.status} ${await res.text().catch(() => "")}`);
     return null;
   }
   return res.text();
@@ -92,7 +83,6 @@ function parseRssItems(xml) {
 async function upsertNoticias(items, fonte) {
   if (!items.length) return 0;
 
-  // Colunas reais da tabela `noticias`
   const rows = items.map((item) => ({
     titulo: item.title || "",
     resumo: item.description || "",
@@ -112,7 +102,7 @@ async function upsertNoticias(items, fonte) {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`,
         "Content-Type": "application/json",
-        Prefer: "resolution=ignore-duplicates", // exige constraint UNIQUE em url_original
+        Prefer: "resolution=ignore-duplicates",
       },
       body: JSON.stringify(rows),
     }
@@ -127,20 +117,18 @@ async function upsertNoticias(items, fonte) {
 }
 
 export default async function handler(req, res) {
-  // Protege o endpoint para só aceitar chamadas do Vercel Cron
   if (CRON_SECRET && req.headers.authorization !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: "Não autorizado" });
   }
 
   try {
-    const baseUrl = getOwnFeedBaseUrl(req);
     const fontes = await fetchFontesAtivas();
 
     let totalInseridas = 0;
     const resultados = [];
 
     for (const fonte of fontes) {
-      const xml = await fetchFeedXml(baseUrl, fonte.url);
+      const xml = await fetchFeedXml(fonte.url);
       if (!xml) {
         resultados.push({ fonte: fonte.nome, status: "erro_fetch" });
         continue;
