@@ -90,6 +90,7 @@ async function upsertNoticias(items, fonte) {
     fonte_id: fonte.id,
     fonte_nome: fonte.nome,
     regiao: fonte.regiao || null,
+    categoria: "Geral",
     data_publicacao: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
     processado_ia: false,
   }));
