@@ -62,10 +62,7 @@ function normalizarUrl(url) {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 // Decide a estratégia de cada fonte: RSS nativo (busca direta), scraping via Manus, ou sem suporte
-function normalizarUrl(url) {
-  if (!url) return url;
-  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
-}
+
 
 function getEstrategia(fonte) {
   if (fonte.rss_url) return "rss_nativo";
