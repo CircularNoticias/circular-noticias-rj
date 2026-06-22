@@ -57,14 +57,22 @@ async function fetchFontesAtivas() {
   if (!res.ok) throw new Error(`Falha ao buscar fontes: ${res.status}`);
   return res.json();
 }
-
+function normalizarUrl(url) {
+  if (!url) return url;
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
 // Decide a estratégia de cada fonte: RSS nativo (busca direta), scraping via Manus, ou sem suporte
+function normalizarUrl(url) {
+  if (!url) return url;
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
 function getEstrategia(fonte) {
   if (fonte.rss_url) return "rss_nativo";
   if (!fonte.url) return "sem_suporte";
   let dominio;
   try {
-    dominio = new URL(fonte.url).hostname;
+    dominio = new URL(normalizarUrl(fonte.url)).hostname;
   } catch {
     return "sem_suporte";
   }
@@ -160,7 +168,7 @@ export default async function handler(req, res) {
       const xml =
         estrategia === "rss_nativo"
           ? await fetchRssNativo(fonte.rss_url)
-          : await fetchFeedXml(fonte.url);
+          : await fetchFeedXml(normalizarUrl(fonte.url));
 
       if (!xml) {
         resultados.push({ fonte: fonte.nome, status: "erro_fetch", estrategia });
