@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "./lib/supabaseClient";
 
 const REGIONS = [
   { id: "todos", label: "Todo o Estado" },
@@ -15,20 +16,69 @@ const REGIONS = [
 const CATEGORIES = ["Todos","Política","Segurança","Economia","Turismo","Saúde","Educação","Tecnologia","Meio Ambiente"];
 const LAGOS_CITIES = ["Cabo Frio","Arraial do Cabo","Armação dos Búzios","São Pedro da Aldeia","Araruama","Saquarema","Iguaba Grande"];
 
-const NEWS = [
-  { id:1, region:"lagos", city:"Cabo Frio", category:"Turismo", headline:"Cabo Frio registra recorde de turistas no feriadão de Junho", summary:"O município de Cabo Frio registrou movimento histórico nas praias e pousadas durante o feriado prolongado. A Secretaria de Turismo estima mais de 120 mil visitantes, gerando impacto positivo no comércio local e na rede hoteleira da cidade.", source:"O Globo", sourceUrl:"#", date:"08/06/2026", time:"09:14", related:["Extra","G1 RJ"], tag:"DESTAQUE" },
-  { id:2, region:"lagos", city:"Armação dos Búzios", category:"Turismo", headline:"Búzios lança programa de sustentabilidade para preservar praias", summary:"A Prefeitura de Búzios apresentou o programa 'Búzios Limpo', que prevê coleta seletiva nas praias, restrição de plástico descartável e criação de pontos de reciclagem em toda a orla. A iniciativa conta com parceria de ONGs ambientais.", source:"RJ Notícias", sourceUrl:"#", date:"08/06/2026", time:"08:30", related:["Diário de Búzios"], tag:"" },
-  { id:3, region:"lagos", city:"Arraial do Cabo", category:"Meio Ambiente", headline:"Arraial do Cabo monitora qualidade da água com nova tecnologia", summary:"A Reserva Extrativista Marinha de Arraial do Cabo passa a contar com sensores subaquáticos que monitoram em tempo real a temperatura e qualidade da água. O projeto é uma parceria entre a prefeitura e universidades federais do Rio.", source:"Folha do Lagos", sourceUrl:"#", date:"08/06/2026", time:"07:55", related:[], tag:"" },
-  { id:4, region:"lagos", city:"Araruama", category:"Saúde", headline:"Araruama inaugura UPA com atendimento 24h na região lagunar", summary:"A nova Unidade de Pronto Atendimento de Araruama abre as portas nesta semana, oferecendo serviços médicos ininterruptos à população. A unidade conta com pronto-socorro, laboratório e leitos de observação.", source:"A Voz do Lagos", sourceUrl:"#", date:"07/06/2026", time:"18:00", related:["O São Pedro"], tag:"NOVO" },
-  { id:5, region:"metropolitana", city:"Rio de Janeiro", category:"Segurança", headline:"Operação policial reduz índice de roubos na Zona Norte em 30%", summary:"Dados da Secretaria de Segurança Pública indicam queda expressiva nos crimes de roubo em bairros da Zona Norte após intensificação do policiamento ostensivo. A operação, em andamento há 45 dias, já resultou em mais de 200 prisões.", source:"G1 RJ", sourceUrl:"#", date:"08/06/2026", time:"10:00", related:["Extra","O Globo"], tag:"DESTAQUE" },
-  { id:6, region:"metropolitana", city:"Rio de Janeiro", category:"Política", headline:"Câmara Municipal do Rio aprova novo plano diretor da cidade", summary:"Vereadores aprovaram por maioria o novo Plano Diretor do Rio de Janeiro, que regulamenta o uso do solo, expansão urbana e zonas de preservação ambiental. O texto segue agora para sanção do prefeito.", source:"O Globo", sourceUrl:"#", date:"08/06/2026", time:"11:30", related:["Globo News"], tag:"" },
-  { id:7, region:"serrana", city:"Petrópolis", category:"Economia", headline:"Petrópolis atrai R$ 200 milhões em investimentos no setor têxtil", summary:"O tradicional polo têxtil de Petrópolis anuncia a chegada de três novas indústrias, gerando estimativa de 1.500 empregos diretos nos próximos dois anos. O investimento inclui fábricas de moda sustentável voltadas para exportação.", source:"Correio Serrano", sourceUrl:"#", date:"07/06/2026", time:"14:20", related:[], tag:"" },
-  { id:8, region:"norte", city:"Campos dos Goytacazes", category:"Tecnologia", headline:"Campos inaugura hub de tecnologia e startups no interior do estado", summary:"O Norte Fluminense ganha seu primeiro hub oficial de inovação, instalado em Campos dos Goytacazes. O espaço oferece infraestrutura para startups, mentorias e conexão com investidores, com foco em agro-tech e energia limpa.", source:"Folha do Norte", sourceUrl:"#", date:"07/06/2026", time:"09:00", related:["Portal Campos"], tag:"NOVO" },
-  { id:9, region:"costa-verde", city:"Angra dos Reis", category:"Turismo", headline:"Angra dos Reis abre temporada de mergulho com roteiros inéditos", summary:"A Costa Verde apresenta novos roteiros de mergulho nas ilhas de Angra dos Reis, incluindo acesso a naufrágios históricos e corais preservados. A temporada promete atrair mergulhadores de todo o Brasil e do exterior.", source:"Costa Verde News", sourceUrl:"#", date:"08/06/2026", time:"08:00", related:[], tag:"" },
-  { id:10, region:"lagos", city:"São Pedro da Aldeia", category:"Educação", headline:"São Pedro da Aldeia expande rede de escolas em tempo integral", summary:"O município anunciou a ampliação do programa de educação em tempo integral, que passará a atender mais 3.000 alunos a partir do segundo semestre. Novas unidades escolares serão construídas nos bairros periféricos da cidade.", source:"Diário Regional", sourceUrl:"#", date:"07/06/2026", time:"16:45", related:[], tag:"" },
-  { id:11, region:"metropolitana", city:"Niterói", category:"Meio Ambiente", headline:"Niterói investe em energia solar em prédios públicos municipais", summary:"A Prefeitura de Niterói anunciou a instalação de painéis solares em 40 unidades públicas, entre escolas, postos de saúde e secretarias. A medida deve reduzir em 25% os gastos com energia elétrica do município.", source:"Niterói News", sourceUrl:"#", date:"08/06/2026", time:"07:00", related:[], tag:"" },
-  { id:12, region:"medio-paraiba", city:"Volta Redonda", category:"Economia", headline:"Volta Redonda retoma produção siderúrgica com novos contratos", summary:"A CSN anuncia retomada de dois altos-fornos em Volta Redonda, após fechar acordos com montadoras nacionais e internacionais. A medida deve reincorporar mais de 800 trabalhadores ao quadro de funcionários ainda neste semestre.", source:"Diário do Aço", sourceUrl:"#", date:"07/06/2026", time:"13:00", related:["Folha do Vale"], tag:"" },
-];
+// Mapeamento cidade -> região. A tabela "noticias" não possui coluna de região,
+// então ela é derivada da cidade aqui no front-end.
+// IMPORTANTE: complete este mapa conforme novas cidades aparecerem nos dados reais.
+// Cidades não mapeadas caem em "metropolitana" por padrão (ver getRegionForCity).
+const CITY_TO_REGION = {
+  "Cabo Frio": "lagos",
+  "Arraial do Cabo": "lagos",
+  "Armação dos Búzios": "lagos",
+  "Búzios": "lagos",
+  "São Pedro da Aldeia": "lagos",
+  "Araruama": "lagos",
+  "Saquarema": "lagos",
+  "Iguaba Grande": "lagos",
+  "Rio de Janeiro": "metropolitana",
+  "Niterói": "metropolitana",
+  "São Gonçalo": "metropolitana",
+  "Duque de Caxias": "metropolitana",
+  "Nova Iguaçu": "metropolitana",
+  "Petrópolis": "serrana",
+  "Teresópolis": "serrana",
+  "Nova Friburgo": "serrana",
+  "Campos dos Goytacazes": "norte",
+  "Macaé": "norte",
+  "Itaperuna": "noroeste",
+  "Angra dos Reis": "costa-verde",
+  "Paraty": "costa-verde",
+  "Volta Redonda": "medio-paraiba",
+  "Barra Mansa": "medio-paraiba",
+  "Resende": "medio-paraiba",
+  "Vassouras": "centro-sul",
+  "Valença": "centro-sul",
+};
+
+function getRegionForCity(city) {
+  return CITY_TO_REGION[city] || "metropolitana";
+}
+
+function formatDateTime(isoString) {
+  if (!isoString) return { date: "", time: "" };
+  const d = new Date(isoString);
+  const date = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return { date, time };
+}
+
+// Mapeia uma linha da tabela "noticias" para o formato que os componentes esperam
+function mapNewsRow(row) {
+  const { date, time } = formatDateTime(row.created_at);
+  return {
+    id: row.id,
+    region: getRegionForCity(row.cidade),
+    city: row.cidade || "",
+    category: row.categoria || "",
+    headline: row.titulo || "",
+    summary: row.resumo || "",
+    source: row.fonte_nome || "",
+    sourceUrl: row.url_original || "#",
+    date,
+    time,
+    related: [],
+    tag: "",
+  };
+}
 
 const categoryColors = {
   "Turismo":"#0ea5e9","Meio Ambiente":"#22c55e","Saúde":"#f43f5e",
@@ -85,7 +135,7 @@ function NewsCard({ news, onClick }) {
   );
 }
 
-function Modal({ news, onClose, aiLoading, aiResponse, onGenerateAI }) {
+function Modal({ news, onClose }) {
   const color = categoryColors[news.category] || "#64748b";
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
@@ -103,16 +153,6 @@ function Modal({ news, onClose, aiLoading, aiResponse, onGenerateAI }) {
               <span style={{ fontSize:12, fontWeight:700, color:"#6366f1" }}>Resumo</span>
             </div>
             <p style={{ margin:0, fontSize:13, color:"#334155", lineHeight:1.6 }}>{news.summary}</p>
-          </div>
-          <div style={{ marginBottom:16 }}>
-            <button onClick={onGenerateAI} disabled={aiLoading} style={{ background:aiLoading?"#e2e8f0":"linear-gradient(135deg,#6366f1,#8b5cf6)", color:aiLoading?"#94a3b8":"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:aiLoading?"not-allowed":"pointer", display:"flex", alignItems:"center", gap:6 }}>
-              {aiLoading ? "⏳ Gerando análise..." : "✨ Análise Aprofundada"}
-            </button>
-            {aiResponse && (
-              <div style={{ marginTop:12, background:"#faf5ff", border:"1px solid #e9d5ff", borderRadius:10, padding:"12px 14px" }}>
-                <p style={{ margin:0, fontSize:13, color:"#4c1d95", lineHeight:1.65 }}>{aiResponse}</p>
-              </div>
-            )}
           </div>
           <div style={{ borderTop:"1px solid #f1f5f9", paddingTop:14 }}>
             <p style={{ margin:"0 0 6px", fontSize:12, color:"#64748b", fontWeight:600 }}>FONTES</p>
@@ -135,12 +175,43 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNews, setSelectedNews] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResponse, setAiResponse] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
 
-  const filtered = NEWS.filter(n => {
+  // Estado dos dados reais do Supabase
+  const [news, setNews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadNews() {
+      setLoading(true);
+      setError(null);
+      const { data, error: fetchError } = await supabase
+        .from("noticias")
+        .select("id, titulo, resumo, fonte_nome, url_original, cidade, categoria, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (!isMounted) return;
+
+      if (fetchError) {
+        console.error("Erro ao buscar notícias do Supabase:", fetchError);
+        setError("Não foi possível carregar as notícias agora. Tente novamente em alguns instantes.");
+        setNews([]);
+      } else {
+        setNews((data || []).map(mapNewsRow));
+      }
+      setLoading(false);
+    }
+
+    loadNews();
+    return () => { isMounted = false; };
+  }, []);
+
+  const filtered = news.filter(n => {
     const regionMatch = activeRegion === "todos" || n.region === activeRegion;
     const categoryMatch = activeCategory === "Todos" || n.category === activeCategory;
     return regionMatch && categoryMatch;
@@ -172,26 +243,9 @@ Responda APENAS com JSON válido, sem markdown.`,
     setSearch("");
   };
 
-  const handleGenerateAI = async () => {
-    if (!selectedNews) return;
-    setAiLoading(true); setAiResponse("");
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:1000,
-          system:`Você é um analista de notícias do portal Circular Notícias RJ. Forneça uma análise aprofundada e contextualizada da notícia sobre o Rio de Janeiro. Seja objetivo, informativo, neutro e destaque impactos para a população local. Máximo 4 parágrafos curtos.`,
-          messages:[{ role:"user", content:`Analise:\nTítulo: ${selectedNews.headline}\nResumo: ${selectedNews.summary}\nCidade: ${selectedNews.city}\nCategoria: ${selectedNews.category}` }]
-        })
-      });
-      const data = await res.json();
-      setAiResponse(data.content.map(i=>i.text||"").join(""));
-    } catch { setAiResponse("Não foi possível gerar a análise no momento. Tente novamente."); }
-    setAiLoading(false);
-  };
-
-  const openNews = (news) => { setSelectedNews(news); setAiResponse(""); };
-  const highlights = NEWS.filter(n => n.tag === "DESTAQUE");
+  const openNews = (n) => { setSelectedNews(n); };
+  const highlights = news.slice(0, 5);
+  const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 
   return (
     <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" }}>
@@ -205,7 +259,7 @@ Responda APENAS com JSON válido, sem markdown.`,
                 <div style={{ color:"#38bdf8", fontWeight:700, fontSize:11, letterSpacing:3 }}>NOTÍCIAS RJ</div>
               </div>
             </div>
-            <div style={{ color:"#64748b", fontSize:11 }}>Seg, 08 Jun 2026</div>
+            <div style={{ color:"#64748b", fontSize:11 }}>{todayLabel}</div>
           </div>
           <div style={{ display:"flex", gap:8, paddingBottom:10 }}>
             <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()}
@@ -240,59 +294,74 @@ Responda APENAS com JSON válido, sem markdown.`,
           </div>
         )}
 
-        {activeRegion==="todos" && !searchResults && (
-          <div style={{ marginBottom:24 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-              <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
-              <h2 style={{ margin:0, fontSize:15, fontWeight:800, color:"#1e293b", letterSpacing:-0.3 }}>DESTAQUES DO ESTADO</h2>
-              <span style={{ background:"#fee2e2", color:"#dc2626", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10 }}>AO VIVO</span>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
-              {highlights.map(n=><NewsCard key={n.id} news={n} onClick={openNews}/>)}
-            </div>
+        {error && (
+          <div style={{ background:"#fef2f2", border:"1px solid #fecaca", borderRadius:12, padding:"14px 18px", marginBottom:20, color:"#b91c1c", fontSize:13 }}>
+            ⚠️ {error}
           </div>
         )}
 
-        {activeRegion==="lagos" && (
-          <div style={{ marginBottom:16 }}>
-            <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:4, scrollbarWidth:"none" }}>
-              {LAGOS_CITIES.map(c=>(
-                <span key={c} style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap", cursor:"pointer" }}>📍 {c}</span>
+        {loading ? (
+          <div style={{ textAlign:"center", padding:"60px 20px", color:"#94a3b8" }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>⏳</div>
+            <p style={{ margin:0, fontSize:14 }}>Carregando notícias...</p>
+          </div>
+        ) : (
+          <>
+            {activeRegion==="todos" && !searchResults && highlights.length > 0 && (
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                  <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
+                  <h2 style={{ margin:0, fontSize:15, fontWeight:800, color:"#1e293b", letterSpacing:-0.3 }}>DESTAQUES DO ESTADO</h2>
+                  <span style={{ background:"#fee2e2", color:"#dc2626", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10 }}>AO VIVO</span>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+                  {highlights.map(n=><NewsCard key={n.id} news={n} onClick={openNews}/>)}
+                </div>
+              </div>
+            )}
+
+            {activeRegion==="lagos" && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:4, scrollbarWidth:"none" }}>
+                  {LAGOS_CITIES.map(c=>(
+                    <span key={c} style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap", cursor:"pointer" }}>📍 {c}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display:"flex", gap:6, overflowX:"auto", marginBottom:16, paddingBottom:4, scrollbarWidth:"none" }}>
+              {CATEGORIES.map(c=>(
+                <button key={c} onClick={()=>setActiveCategory(c)}
+                  style={{ background:activeCategory===c?"#1e293b":"#fff", border:"1px solid "+(activeCategory===c?"#1e293b":"#e2e8f0"), borderRadius:20, padding:"5px 14px", color:activeCategory===c?"#fff":"#475569", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s" }}>
+                  {c}
+                </button>
               ))}
             </div>
-          </div>
+
+            <div style={{ marginBottom:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
+                <div style={{ width:3, height:18, background:"#3b82f6", borderRadius:2 }}/>
+                <h2 style={{ margin:0, fontSize:14, fontWeight:800, color:"#1e293b" }}>
+                  {activeRegion==="todos" ? "TODAS AS NOTÍCIAS" : REGIONS.find(r=>r.id===activeRegion)?.label.toUpperCase()}
+                </h2>
+                <span style={{ background:"#f1f5f9", color:"#64748b", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10 }}>
+                  {filtered.length} notícia{filtered.length!==1?"s":""}
+                </span>
+              </div>
+              {filtered.length===0 ? (
+                <div style={{ textAlign:"center", padding:"40px 20px", color:"#94a3b8" }}>
+                  <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
+                  <p style={{ margin:0, fontSize:14 }}>Nenhuma notícia encontrada para este filtro.</p>
+                </div>
+              ) : (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+                  {filtered.map(n=><NewsCard key={n.id} news={n} onClick={openNews}/>)}
+                </div>
+              )}
+            </div>
+          </>
         )}
-
-        <div style={{ display:"flex", gap:6, overflowX:"auto", marginBottom:16, paddingBottom:4, scrollbarWidth:"none" }}>
-          {CATEGORIES.map(c=>(
-            <button key={c} onClick={()=>setActiveCategory(c)}
-              style={{ background:activeCategory===c?"#1e293b":"#fff", border:"1px solid "+(activeCategory===c?"#1e293b":"#e2e8f0"), borderRadius:20, padding:"5px 14px", color:activeCategory===c?"#fff":"#475569", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s" }}>
-              {c}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ marginBottom:12 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-            <div style={{ width:3, height:18, background:"#3b82f6", borderRadius:2 }}/>
-            <h2 style={{ margin:0, fontSize:14, fontWeight:800, color:"#1e293b" }}>
-              {activeRegion==="todos" ? "TODAS AS NOTÍCIAS" : REGIONS.find(r=>r.id===activeRegion)?.label.toUpperCase()}
-            </h2>
-            <span style={{ background:"#f1f5f9", color:"#64748b", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10 }}>
-              {filtered.length} notícia{filtered.length!==1?"s":""}
-            </span>
-          </div>
-          {filtered.length===0 ? (
-            <div style={{ textAlign:"center", padding:"40px 20px", color:"#94a3b8" }}>
-              <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
-              <p style={{ margin:0, fontSize:14 }}>Nenhuma notícia encontrada para este filtro.</p>
-            </div>
-          ) : (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
-              {filtered.map(n=><NewsCard key={n.id} news={n} onClick={openNews}/>)}
-            </div>
-          )}
-        </div>
       </div>
 
       <footer style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", marginTop:16, padding:"36px 20px 24px" }}>
@@ -324,8 +393,8 @@ Responda APENAS com JSON válido, sem markdown.`,
       </footer>
 
       {selectedNews && (
-        <Modal news={selectedNews} onClose={()=>setSelectedNews(null)} aiLoading={aiLoading} aiResponse={aiResponse} onGenerateAI={handleGenerateAI}/>
+        <Modal news={selectedNews} onClose={()=>setSelectedNews(null)}/>
       )}
     </div>
-  );
+    );
 }
