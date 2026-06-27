@@ -13,44 +13,75 @@ const REGIONS = [
   { id: "centro-sul", label: "Centro-Sul Fluminense" },
 ];
 
-const CATEGORIES = ["Todos","Política","Segurança","Economia","Turismo","Saúde","Educação","Tecnologia","Meio Ambiente"];
+const CATEGORIES = ["Todos","Política","Segurança","Economia","Turismo","Saúde","Educação","Tecnologia","Meio Ambiente","Cultura","Esportes"];
 const LAGOS_CITIES = ["Cabo Frio","Arraial do Cabo","Armação dos Búzios","São Pedro da Aldeia","Araruama","Saquarema","Iguaba Grande"];
 
-// Mapeamento cidade -> região. A tabela "noticias" não possui coluna de região,
-// então ela é derivada da cidade aqui no front-end.
-// IMPORTANTE: complete este mapa conforme novas cidades aparecerem nos dados reais.
-// Cidades não mapeadas caem em "metropolitana" por padrão (ver getRegionForCity).
+const VALID_REGION_IDS = REGIONS.map(r => r.id).filter(id => id !== "todos");
+
+// Mapa de apoio cidade -> região, usado só como fallback quando o banco
+// não trouxer uma região reconhecível (dados antigos, por exemplo).
 const CITY_TO_REGION = {
-  "Cabo Frio": "lagos",
-  "Arraial do Cabo": "lagos",
-  "Armação dos Búzios": "lagos",
-  "Búzios": "lagos",
-  "São Pedro da Aldeia": "lagos",
-  "Araruama": "lagos",
-  "Saquarema": "lagos",
-  "Iguaba Grande": "lagos",
-  "Rio de Janeiro": "metropolitana",
-  "Niterói": "metropolitana",
-  "São Gonçalo": "metropolitana",
-  "Duque de Caxias": "metropolitana",
-  "Nova Iguaçu": "metropolitana",
-  "Petrópolis": "serrana",
-  "Teresópolis": "serrana",
-  "Nova Friburgo": "serrana",
-  "Campos dos Goytacazes": "norte",
-  "Macaé": "norte",
-  "Itaperuna": "noroeste",
-  "Angra dos Reis": "costa-verde",
-  "Paraty": "costa-verde",
-  "Volta Redonda": "medio-paraiba",
-  "Barra Mansa": "medio-paraiba",
-  "Resende": "medio-paraiba",
-  "Vassouras": "centro-sul",
-  "Valença": "centro-sul",
+  "Cabo Frio": "lagos", "Arraial do Cabo": "lagos", "Armação dos Búzios": "lagos", "Búzios": "lagos",
+  "São Pedro da Aldeia": "lagos", "Araruama": "lagos", "Saquarema": "lagos", "Iguaba Grande": "lagos",
+  "Rio de Janeiro": "metropolitana", "Niterói": "metropolitana", "São Gonçalo": "metropolitana",
+  "Duque de Caxias": "metropolitana", "Nova Iguaçu": "metropolitana", "Belford Roxo": "metropolitana",
+  "Nilópolis": "metropolitana", "Mesquita": "metropolitana", "Itaboraí": "metropolitana",
+  "Magé": "metropolitana", "Maricá": "metropolitana", "Queimados": "metropolitana",
+  "Japeri": "metropolitana", "Seropédica": "metropolitana", "Itaguaí": "metropolitana",
+  "Guapimirim": "metropolitana", "Rio Bonito": "metropolitana",
+  "Petrópolis": "serrana", "Teresópolis": "serrana", "Nova Friburgo": "serrana",
+  "Cachoeiras de Macacu": "serrana", "Sumidouro": "serrana", "Carmo": "serrana",
+  "Duas Barras": "serrana", "Cordeiro": "serrana", "Santa Maria Madalena": "serrana", "Bom Jardim": "serrana",
+  "Campos dos Goytacazes": "norte", "Macaé": "norte", "São João da Barra": "norte",
+  "Quissamã": "norte", "Carapebus": "norte", "Cardoso Moreira": "norte",
+  "São Fidélis": "norte", "Conceição de Macabu": "norte",
+  "Itaperuna": "noroeste", "Santo Antônio de Pádua": "noroeste", "Miracema": "noroeste",
+  "Italva": "noroeste", "Natividade": "noroeste", "Bom Jesus do Itabapoana": "noroeste", "Porciúncula": "noroeste",
+  "Angra dos Reis": "costa-verde", "Paraty": "costa-verde", "Mangaratiba": "costa-verde",
+  "Volta Redonda": "medio-paraiba", "Barra Mansa": "medio-paraiba", "Resende": "medio-paraiba",
+  "Barra do Piraí": "medio-paraiba", "Pinheiral": "medio-paraiba", "Porto Real": "medio-paraiba",
+  "Quatis": "medio-paraiba", "Itatiaia": "medio-paraiba",
+  "Vassouras": "centro-sul", "Valença": "centro-sul", "Paty do Alferes": "centro-sul",
+  "Mendes": "centro-sul", "Miguel Pereira": "centro-sul",
 };
 
 function getRegionForCity(city) {
-  return CITY_TO_REGION[city] || "metropolitana";
+  return CITY_TO_REGION[city] || null;
+}
+
+// Normaliza o que vier em `noticias.regiao`: pode já ser um id curto válido
+// (notícias novas), ou um texto completo em português (notícias antigas,
+// herdado da região fixa da fonte).
+function normalizeRegiaoText(regiaoText) {
+  if (!regiaoText) return null;
+  if (VALID_REGION_IDS.includes(regiaoText)) return regiaoText;
+  const r = regiaoText.toLowerCase();
+  if (r.includes("lagos")) return "lagos";
+  if (r.includes("serrana")) return "serrana";
+  if (r.includes("noroeste")) return "noroeste";
+  if (r.includes("norte")) return "norte";
+  if (r.includes("costa verde") || r.includes("sul")) return "costa-verde";
+  if (r.includes("paraíba") || r.includes("paraiba")) return "medio-paraiba";
+  if (r.includes("centro-sul") || r.includes("centro sul")) return "centro-sul";
+  if (r.includes("metropolitana") || r.includes("rio de janeiro") || r.includes("estado")) return "metropolitana";
+  return null;
+}
+
+// Resolve a região final combinando: regiao do banco -> cidade -> padrão.
+function resolveRegion(row) {
+  return normalizeRegiaoText(row.regiao) || getRegionForCity(row.cidade) || "metropolitana";
+}
+
+// Limpeza defensiva de HTML, para notícias antigas que possam ter chegado
+// com tags/entidades (notícias novas já vêm limpas direto da ingestão).
+function stripHtmlLight(raw) {
+  if (!raw) return "";
+  let text = String(raw);
+  text = text.replace(/<[^>]*>/g, " ");
+  text = text.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+  const ENTIDADES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…" };
+  text = text.replace(/&([a-zA-Z]+);/g, (m, name) => ENTIDADES[name] ?? m);
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function formatDateTime(isoString) {
@@ -66,13 +97,14 @@ function mapNewsRow(row) {
   const { date, time } = formatDateTime(row.created_at);
   return {
     id: row.id,
-    region: getRegionForCity(row.cidade),
+    region: resolveRegion(row),
     city: row.cidade || "",
-    category: row.categoria || "",
-    headline: row.titulo || "",
-    summary: row.resumo || "",
+    category: row.categoria || "Geral",
+    headline: stripHtmlLight(row.titulo),
+    summary: stripHtmlLight(row.resumo),
     source: row.fonte_nome || "",
-    sourceUrl: row.url_original || "#",
+    sourceUrl: row.url_original || "",
+    image: row.imagem_url || null,
     date,
     time,
     related: [],
@@ -83,8 +115,10 @@ function mapNewsRow(row) {
 const categoryColors = {
   "Turismo":"#0ea5e9","Meio Ambiente":"#22c55e","Saúde":"#f43f5e",
   "Segurança":"#f97316","Política":"#8b5cf6","Economia":"#eab308",
-  "Educação":"#06b6d4","Tecnologia":"#6366f1",
+  "Educação":"#06b6d4","Tecnologia":"#6366f1","Cultura":"#ec4899","Esportes":"#10b981",
 };
+
+const PLACEHOLDER_IMG_BG = "linear-gradient(135deg,#1e3a5f 0%,#0f172a 100%)";
 
 function Logo({ size = 42 }) {
   return (
@@ -106,24 +140,44 @@ function Logo({ size = 42 }) {
   );
 }
 
-function NewsCard({ news, onClick }) {
+function NewsCard({ news }) {
   const color = categoryColors[news.category] || "#64748b";
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImage = news.image && !imgFailed;
+
+  const handleOpen = () => {
+    if (news.sourceUrl) {
+      window.open(news.sourceUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
   return (
-    <div onClick={() => onClick(news)}
+    <div onClick={handleOpen} role="link" tabIndex={0}
+      onKeyDown={e => { if (e.key === "Enter") handleOpen(); }}
       style={{ background:"#fff", borderRadius:12, boxShadow:"0 2px 12px rgba(0,0,0,0.07)", overflow:"hidden", cursor:"pointer", transition:"transform 0.15s, box-shadow 0.15s", display:"flex", flexDirection:"column", border:"1px solid #f1f5f9" }}
       onMouseEnter={e=>{ e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 6px 24px rgba(0,0,0,0.12)"; }}
       onMouseLeave={e=>{ e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.07)"; }}>
-      <div style={{ height:4, background:color }}/>
+      <div style={{ width:"100%", height:140, position:"relative", background: showImage ? "#e2e8f0" : PLACEHOLDER_IMG_BG, flexShrink:0 }}>
+        {showImage ? (
+          <img src={news.image} alt={news.headline} onError={() => setImgFailed(true)}
+            style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
+        ) : (
+          <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Logo size={36}/>
+          </div>
+        )}
+        <div style={{ position:"absolute", bottom:0, left:0, height:4, width:"100%", background:color }}/>
+      </div>
       <div style={{ padding:"14px 16px 16px", flex:1, display:"flex", flexDirection:"column", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
           <span style={{ background:color+"18", color, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{news.category}</span>
           {news.tag && <span style={{ background:"#fef3c7", color:"#92400e", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:20 }}>{news.tag}</span>}
-          <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>📍 {news.city}</span>
+          {news.city && <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>📍 {news.city}</span>}
         </div>
         <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:"#1e293b", lineHeight:1.4 }}>{news.headline}</h3>
         <div style={{ display:"flex", alignItems:"flex-start", gap:6, background:"#f8fafc", borderRadius:8, padding:"8px 10px" }}>
           <span style={{ color:"#6366f1", marginTop:1, fontSize:12 }}>✦</span>
-          <p style={{ margin:0, fontSize:12, color:"#475569", lineHeight:1.55, flex:1 }}>{news.summary.slice(0,120)}...</p>
+          <p style={{ margin:0, fontSize:12, color:"#475569", lineHeight:1.55, flex:1 }}>{(news.summary || "").slice(0,120)}{news.summary && news.summary.length > 120 ? "..." : ""}</p>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:"auto" }}>
           <span style={{ fontSize:11, color:"#0ea5e9", fontWeight:600 }}>{news.source}</span>
@@ -135,46 +189,11 @@ function NewsCard({ news, onClick }) {
   );
 }
 
-function Modal({ news, onClose }) {
-  const color = categoryColors[news.category] || "#64748b";
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
-      <div style={{ background:"#fff", borderRadius:16, maxWidth:560, width:"100%", maxHeight:"85vh", overflow:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }} onClick={e=>e.stopPropagation()}>
-        <div style={{ height:5, background:color, borderRadius:"16px 16px 0 0" }}/>
-        <div style={{ padding:"20px 24px 24px" }}>
-          <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
-            <span style={{ background:color+"18", color, fontSize:12, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>{news.category}</span>
-            <span style={{ background:"#e0f2fe", color:"#0369a1", fontSize:12, fontWeight:600, padding:"3px 10px", borderRadius:20 }}>📍 {news.city}</span>
-          </div>
-          <h2 style={{ margin:"0 0 16px", fontSize:18, fontWeight:800, color:"#1e293b", lineHeight:1.4 }}>{news.headline}</h2>
-          <div style={{ background:"#f1f5f9", borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
-              <span style={{ color:"#6366f1" }}>✦</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#6366f1" }}>Resumo</span>
-            </div>
-            <p style={{ margin:0, fontSize:13, color:"#334155", lineHeight:1.6 }}>{news.summary}</p>
-          </div>
-          <div style={{ borderTop:"1px solid #f1f5f9", paddingTop:14 }}>
-            <p style={{ margin:"0 0 6px", fontSize:12, color:"#64748b", fontWeight:600 }}>FONTES</p>
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              <a href={news.sourceUrl} style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:12, fontWeight:600, padding:"4px 12px", borderRadius:20, textDecoration:"none" }}>🔗 {news.source}</a>
-              {news.related.map(r=><span key={r} style={{ background:"#f1f5f9", color:"#64748b", fontSize:12, padding:"4px 12px", borderRadius:20 }}>{r}</span>)}
-            </div>
-            <p style={{ margin:"12px 0 0", fontSize:11, color:"#94a3b8" }}>Publicado em {news.date} às {news.time}</p>
-          </div>
-          <button onClick={onClose} style={{ marginTop:16, width:"100%", background:"#f1f5f9", color:"#475569", border:"none", borderRadius:8, padding:"10px", fontSize:13, fontWeight:600, cursor:"pointer" }}>Fechar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [activeRegion, setActiveRegion] = useState("todos");
   const [activeCategory, setActiveCategory] = useState("Todos");
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedNews, setSelectedNews] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
 
@@ -191,7 +210,7 @@ export default function App() {
       setError(null);
       const { data, error: fetchError } = await supabase
         .from("noticias")
-        .select("id, titulo, resumo, fonte_nome, url_original, cidade, categoria, created_at")
+        .select("id, titulo, resumo, fonte_nome, url_original, cidade, categoria, regiao, imagem_url, created_at")
         .order("created_at", { ascending: false })
         .limit(200);
 
@@ -243,7 +262,6 @@ Responda APENAS com JSON válido, sem markdown.`,
     setSearch("");
   };
 
-  const openNews = (n) => { setSelectedNews(n); };
   const highlights = news.slice(0, 5);
   const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 
@@ -315,7 +333,7 @@ Responda APENAS com JSON válido, sem markdown.`,
                   <span style={{ background:"#fee2e2", color:"#dc2626", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10 }}>AO VIVO</span>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
-                  {highlights.map(n=><NewsCard key={n.id} news={n} onClick={openNews}/>)}
+                  {highlights.map(n=><NewsCard key={n.id} news={n}/>)}
                 </div>
               </div>
             )}
@@ -356,7 +374,7 @@ Responda APENAS com JSON válido, sem markdown.`,
                 </div>
               ) : (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
-                  {filtered.map(n=><NewsCard key={n.id} news={n} onClick={openNews}/>)}
+                  {filtered.map(n=><NewsCard key={n.id} news={n}/>)}
                 </div>
               )}
             </div>
@@ -391,10 +409,6 @@ Responda APENAS com JSON válido, sem markdown.`,
           </p>
         </div>
       </footer>
-
-      {selectedNews && (
-        <Modal news={selectedNews} onClose={()=>setSelectedNews(null)}/>
-      )}
     </div>
-    );
+  );
 }
