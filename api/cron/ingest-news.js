@@ -307,7 +307,9 @@ async function upsertNoticias(items, fonte) {
 // ---------- Handler principal ----------
 
 export default async function handler(req, res) {
-  if (CRON_SECRET && req.headers.authorization !== `Bearer ${CRON_SECRET}`) {
+  const tokenHeader = req.headers.authorization === `Bearer ${CRON_SECRET}`;
+  const tokenQuery = req.query?.key === CRON_SECRET;
+  if (CRON_SECRET && !tokenHeader && !tokenQuery) {
     return res.status(401).json({ error: "Não autorizado" });
   }
 
