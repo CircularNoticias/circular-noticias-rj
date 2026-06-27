@@ -1,31 +1,18 @@
 // api/cron/ingest-news.js
 //
 // Roda 1x/dia (configurado em vercel.json).
-// Fluxo: busca TODAS as fontes ativas -> decide estratégia por fonte:
-//   - rss_nativo: tem rss_url próprio -> busca direto
-//   - scraping_manus: sem rss_url, domínio na allowlist -> usa o feed
-//     generator hospedado no Manus
-//   - sem_suporte: nenhuma das opções -> ignora (loga no resultado)
-// -> parseia o XML RSS -> insere em `noticias` no Supabase (ignorando
+// Fluxo: busca TODAS as fontes ativas -> decide estratégia por fonte
+// (rss_nativo / scraping_manus / sem_suporte) -> parseia o XML RSS ->
+// LIMPA o HTML do resumo -> EXTRAI imagem (enclosure/media/thumbnail/<img>)
+// -> CLASSIFICA categoria por palavra-chave -> DETECTA cidade/região pelo
+// texto da notícia -> insere em `noticias` no Supabase (ignorando
 // duplicados por url_original).
-//
-// Schema confirmado (Supabase):
-// fontes: id, nome, url, rss_url, regiao, ativo, ultima_coleta, status, created_at
-// noticias: id, titulo, resumo, conteudo_original, url_original, fonte_id,
-//           fonte_nome, regiao, cidade, categoria, data_publicacao, imagem_url,
-//           relevancia, grupo_duplicidade, processado_ia, created_at
-//
-// ⚠️ Para o "ignore-duplicates" funcionar, `noticias.url_original` precisa
-// ter uma constraint UNIQUE no Supabase. Rode antes, se ainda não existir:
-//   ALTER TABLE noticias ADD CONSTRAINT noticias_url_original_key UNIQUE (url_original);
 
 import { XMLParser } from "fast-xml-parser";
 
-// --- Configuração que pode precisar de ajuste ---
 const NOTICIAS_TABLE = "noticias";
 const FONTES_TABLE = "fontes";
 
-// Domínios cobertos pelo /api/feed (scraping HTML / RSS gerado)
 const ALLOWLIST_DOMAINS = [
   "g1.globo.com",
   "noticias.r7.com",
@@ -39,14 +26,178 @@ const ALLOWLIST_DOMAINS = [
 ];
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // precisa ser a service_role key para insert/upsert
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const FEED_API_KEY = process.env.FEED_API_KEY;
-const CRON_SECRET = process.env.CRON_SECRET; // opcional, recomendado
+const CRON_SECRET = process.env.CRON_SECRET;
 
 const FEED_GENERATOR_BASE_URL = "https://rssgenfix-7qjtnnnf.manus.space";
 
+// ---------- Utilitários de texto ----------
+
+function removerAcentos(str) {
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function limparHtml(raw) {
+  if (!raw) return "";
+  let text = String(raw);
+  text = text.replace(/<[^>]*>/g, " "); // remove tags
+  text = text.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+  text = text.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  const ENTIDADES = {
+    amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+    hellip: "…", mdash: "—", ndash: "–", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“",
+  };
+  text = text.replace(/&([a-zA-Z]+);/g, (m, name) => ENTIDADES[name] ?? m);
+  text = text.replace(/\s+/g, " ").trim();
+  return text;
+}
+
+// ---------- Extração de imagem ----------
+
+function extrairImagem(item) {
+  if (item.enclosure) {
+    const enc = Array.isArray(item.enclosure) ? item.enclosure[0] : item.enclosure;
+    if (enc?.["@_url"]) return enc["@_url"];
+  }
+  const media = item["media:content"];
+  if (media) {
+    const m = Array.isArray(media) ? media[0] : media;
+    if (m?.["@_url"]) return m["@_url"];
+  }
+  const thumb = item["media:thumbnail"];
+  if (thumb) {
+    const t = Array.isArray(thumb) ? thumb[0] : thumb;
+    if (t?.["@_url"]) return t["@_url"];
+  }
+  const html = item["content:encoded"] || item.description || "";
+  const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (match) return match[1];
+  return null;
+}
+
+// ---------- Classificação de categoria por palavra-chave ----------
+
+const CATEGORIA_PALAVRAS = {
+  "Política": ["prefeito", "prefeitura", "vereador", "camara municipal", "governador", "alerj", "eleicao", "deputado", "senador", "ministro", "presidente", "partido", "stf", "congresso"],
+  "Economia": ["economia", "emprego", "investimento", "empresa", "inflacao", "comercio", "industria", "pib", "mercado", "negocio", "financeiro", "imposto"],
+  "Segurança": ["policia", "policial", "crime", "roubo", "furto", "homicidio", "prisao", "trafico", "violencia", "operacao policial", "delegacia", "assalto"],
+  "Saúde": ["saude", "hospital", "upa", "posto de saude", "vacina", "medico", "sus", "doenca", "covid", "dengue", "clinica"],
+  "Educação": ["escola", "educacao", "aluno", "professor", "universidade", "ensino", "matricula", "colegio", "creche"],
+  "Turismo": ["turismo", "turista", "praia", "hotel", "pousada", "viagem", "feriado", "temporada"],
+  "Meio Ambiente": ["meio ambiente", "sustentabilidade", "reciclagem", "poluicao", "preservacao", "ambiental", "desmatamento", "queimada"],
+  "Tecnologia": ["tecnologia", "startup", "internet", "aplicativo", "digital", "inovacao", "inteligencia artificial", "software"],
+  "Cultura": ["cultura", "show", "festival", "teatro", "musica", "cinema", "exposicao", "artista", "carnaval"],
+  "Esportes": ["futebol", "esporte", "campeonato", "jogo", "time", "atleta", "copa", "olimpiada", "gol"],
+};
+
+function classificarCategoria(titulo, resumo) {
+  const texto = removerAcentos(`${titulo} ${resumo}`.toLowerCase());
+  for (const [categoria, palavras] of Object.entries(CATEGORIA_PALAVRAS)) {
+    if (palavras.some((p) => texto.includes(p))) return categoria;
+  }
+  return "Geral";
+}
+
+// ---------- Detecção de cidade/região pelo texto da notícia ----------
+// Os ids de região batem com os usados no front-end (REGIONS), para
+// permitir comparação direta sem precisar de normalização lá.
+
+const CIDADES_REGIAO = [
+  ["rio de janeiro", "Rio de Janeiro", "metropolitana"],
+  ["niteroi", "Niterói", "metropolitana"],
+  ["nova iguacu", "Nova Iguaçu", "metropolitana"],
+  ["duque de caxias", "Duque de Caxias", "metropolitana"],
+  ["sao goncalo", "São Gonçalo", "metropolitana"],
+  ["belford roxo", "Belford Roxo", "metropolitana"],
+  ["nilopolis", "Nilópolis", "metropolitana"],
+  ["mesquita", "Mesquita", "metropolitana"],
+  ["itaborai", "Itaboraí", "metropolitana"],
+  ["mage", "Magé", "metropolitana"],
+  ["marica", "Maricá", "metropolitana"],
+  ["queimados", "Queimados", "metropolitana"],
+  ["japeri", "Japeri", "metropolitana"],
+  ["seropedica", "Seropédica", "metropolitana"],
+  ["itaguai", "Itaguaí", "metropolitana"],
+  ["guapimirim", "Guapimirim", "metropolitana"],
+  ["rio bonito", "Rio Bonito", "metropolitana"],
+  ["cabo frio", "Cabo Frio", "lagos"],
+  ["arraial do cabo", "Arraial do Cabo", "lagos"],
+  ["buzios", "Búzios", "lagos"],
+  ["armacao dos buzios", "Armação dos Búzios", "lagos"],
+  ["sao pedro da aldeia", "São Pedro da Aldeia", "lagos"],
+  ["araruama", "Araruama", "lagos"],
+  ["iguaba grande", "Iguaba Grande", "lagos"],
+  ["saquarema", "Saquarema", "lagos"],
+  ["petropolis", "Petrópolis", "serrana"],
+  ["teresopolis", "Teresópolis", "serrana"],
+  ["nova friburgo", "Nova Friburgo", "serrana"],
+  ["cachoeiras de macacu", "Cachoeiras de Macacu", "serrana"],
+  ["sumidouro", "Sumidouro", "serrana"],
+  ["carmo", "Carmo", "serrana"],
+  ["duas barras", "Duas Barras", "serrana"],
+  ["cordeiro", "Cordeiro", "serrana"],
+  ["santa maria madalena", "Santa Maria Madalena", "serrana"],
+  ["bom jardim", "Bom Jardim", "serrana"],
+  ["campos dos goytacazes", "Campos dos Goytacazes", "norte"],
+  ["macae", "Macaé", "norte"],
+  ["sao joao da barra", "São João da Barra", "norte"],
+  ["quissama", "Quissamã", "norte"],
+  ["carapebus", "Carapebus", "norte"],
+  ["cardoso moreira", "Cardoso Moreira", "norte"],
+  ["sao fidelis", "São Fidélis", "norte"],
+  ["conceicao de macabu", "Conceição de Macabu", "norte"],
+  ["itaperuna", "Itaperuna", "noroeste"],
+  ["santo antonio de padua", "Santo Antônio de Pádua", "noroeste"],
+  ["miracema", "Miracema", "noroeste"],
+  ["italva", "Italva", "noroeste"],
+  ["natividade", "Natividade", "noroeste"],
+  ["bom jesus do itabapoana", "Bom Jesus do Itabapoana", "noroeste"],
+  ["porciuncula", "Porciúncula", "noroeste"],
+  ["angra dos reis", "Angra dos Reis", "costa-verde"],
+  ["paraty", "Paraty", "costa-verde"],
+  ["mangaratiba", "Mangaratiba", "costa-verde"],
+  ["volta redonda", "Volta Redonda", "medio-paraiba"],
+  ["barra mansa", "Barra Mansa", "medio-paraiba"],
+  ["resende", "Resende", "medio-paraiba"],
+  ["barra do pirai", "Barra do Piraí", "medio-paraiba"],
+  ["pinheiral", "Pinheiral", "medio-paraiba"],
+  ["porto real", "Porto Real", "medio-paraiba"],
+  ["quatis", "Quatis", "medio-paraiba"],
+  ["itatiaia", "Itatiaia", "medio-paraiba"],
+  ["vassouras", "Vassouras", "centro-sul"],
+  ["valenca", "Valença", "centro-sul"],
+  ["paty do alferes", "Paty do Alferes", "centro-sul"],
+  ["mendes", "Mendes", "centro-sul"],
+  ["miguel pereira", "Miguel Pereira", "centro-sul"],
+];
+
+function detectarCidadeRegiao(titulo, resumo) {
+  const texto = removerAcentos(`${titulo} ${resumo}`.toLowerCase());
+  for (const [match, nome, regiao] of CIDADES_REGIAO) {
+    if (texto.includes(match)) {
+      return { cidade: nome, regiao };
+    }
+  }
+  return null;
+}
+
+function regiaoFallback(regiaoFonte) {
+  if (!regiaoFonte) return "metropolitana";
+  const r = removerAcentos(regiaoFonte.toLowerCase());
+  if (r.includes("lagos")) return "lagos";
+  if (r.includes("serrana")) return "serrana";
+  if (r.includes("noroeste")) return "noroeste";
+  if (r.includes("norte")) return "norte";
+  if (r.includes("costa verde") || r.includes("sul")) return "costa-verde";
+  if (r.includes("paraiba")) return "medio-paraiba";
+  if (r.includes("centro-sul") || r.includes("centro sul")) return "centro-sul";
+  return "metropolitana";
+}
+
+// ---------- Fontes ----------
+
 async function fetchFontesAtivas() {
-  // Colunas reais da tabela `fontes`: id, nome, url, rss_url, regiao, ativo, status
   const url = `${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?select=id,nome,url,rss_url,regiao,ativo&ativo=eq.true`;
   const res = await fetch(url, {
     headers: {
@@ -57,12 +208,11 @@ async function fetchFontesAtivas() {
   if (!res.ok) throw new Error(`Falha ao buscar fontes: ${res.status}`);
   return res.json();
 }
+
 function normalizarUrl(url) {
   if (!url) return url;
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
-// Decide a estratégia de cada fonte: RSS nativo (busca direta), scraping via Manus, ou sem suporte
-
 
 function getEstrategia(fonte) {
   if (fonte.rss_url) return "rss_nativo";
@@ -77,7 +227,6 @@ function getEstrategia(fonte) {
   return "sem_suporte";
 }
 
-// Busca RSS nativo direto da própria fonte
 async function fetchRssNativo(rssUrl) {
   const res = await fetch(rssUrl);
   if (!res.ok) {
@@ -104,21 +253,34 @@ function parseRssItems(xml) {
   return Array.isArray(items) ? items : [items];
 }
 
+// ---------- Inserção no Supabase ----------
+
 async function upsertNoticias(items, fonte) {
   if (!items.length) return 0;
 
-  // Colunas reais da tabela `noticias`
-  const rows = items.map((item) => ({
-    titulo: item.title || "",
-    resumo: item.description || "",
-    url_original: item.link || "",
-    fonte_id: fonte.id,
-    fonte_nome: fonte.nome,
-    regiao: fonte.regiao || null,
-    categoria: "Geral",
-    data_publicacao: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-    processado_ia: false,
-  }));
+  const rows = items.map((item) => {
+    const tituloLimpo = limparHtml(item.title || "");
+    const resumoLimpo = limparHtml(item.description || "");
+    const deteccao = detectarCidadeRegiao(tituloLimpo, resumoLimpo);
+    const regiao = deteccao ? deteccao.regiao : regiaoFallback(fonte.regiao);
+    const cidade = deteccao ? deteccao.cidade : null;
+    const categoria = classificarCategoria(tituloLimpo, resumoLimpo);
+    const imagemUrl = extrairImagem(item);
+
+    return {
+      titulo: tituloLimpo,
+      resumo: resumoLimpo,
+      url_original: item.link || "",
+      fonte_id: fonte.id,
+      fonte_nome: fonte.nome,
+      regiao,
+      cidade,
+      categoria,
+      imagem_url: imagemUrl,
+      data_publicacao: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+      processado_ia: false,
+    };
+  });
 
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/${NOTICIAS_TABLE}?on_conflict=url_original`,
@@ -128,7 +290,7 @@ async function upsertNoticias(items, fonte) {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`,
         "Content-Type": "application/json",
-        Prefer: "resolution=ignore-duplicates", // exige constraint UNIQUE em url_original
+        Prefer: "resolution=ignore-duplicates",
       },
       body: JSON.stringify(rows),
     }
@@ -142,8 +304,9 @@ async function upsertNoticias(items, fonte) {
   return rows.length;
 }
 
+// ---------- Handler principal ----------
+
 export default async function handler(req, res) {
-  // Protege o endpoint para só aceitar chamadas do Vercel Cron
   if (CRON_SECRET && req.headers.authorization !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: "Não autorizado" });
   }
@@ -187,4 +350,5 @@ export default async function handler(req, res) {
     console.error("Erro no cron de ingestão:", err);
     return res.status(500).json({ error: err.message });
   }
-}
+    }
+               
