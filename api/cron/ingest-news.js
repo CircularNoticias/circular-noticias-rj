@@ -79,18 +79,17 @@ function extrairImagem(item) {
 // ---------- Classificação de categoria por palavra-chave ----------
 
 const CATEGORIA_PALAVRAS = {
-  "Política": ["prefeito", "prefeitura", "vereador", "camara municipal", "governador", "alerj", "eleicao", "deputado", "senador", "ministro", "presidente", "partido", "stf", "congresso"],
-  "Economia": ["economia", "emprego", "investimento", "empresa", "inflacao", "comercio", "industria", "pib", "mercado", "negocio", "financeiro", "imposto"],
-  "Segurança": ["policia", "policial", "crime", "roubo", "furto", "homicidio", "prisao", "trafico", "violencia", "operacao policial", "delegacia", "assalto"],
-  "Saúde": ["saude", "hospital", "upa", "posto de saude", "vacina", "medico", "sus", "doenca", "covid", "dengue", "clinica"],
-  "Educação": ["escola", "educacao", "aluno", "professor", "universidade", "ensino", "matricula", "colegio", "creche"],
-  "Turismo": ["turismo", "turista", "praia", "hotel", "pousada", "viagem", "feriado", "temporada"],
-  "Meio Ambiente": ["meio ambiente", "sustentabilidade", "reciclagem", "poluicao", "preservacao", "ambiental", "desmatamento", "queimada"],
-  "Tecnologia": ["tecnologia", "startup", "internet", "aplicativo", "digital", "inovacao", "inteligencia artificial", "software"],
-  "Cultura": ["cultura", "show", "festival", "teatro", "musica", "cinema", "exposicao", "artista", "carnaval"],
-  "Esportes": ["futebol", "esporte", "campeonato", "jogo", "time", "atleta", "copa", "olimpiada", "gol"],
+  "Política": ["prefeito", "prefeitura", "vereador", "camara municipal", "camara dos vereadores", "governador", "alerj", "eleicao", "eleitoral", "candidato", "deputado", "senador", "ministro", "presidente", "partido", "stf", "congresso", "secretario", "secretaria municipal", "projeto de lei", "plenario", "sancionar", "veto"],
+  "Economia": ["economia", "emprego", "desemprego", "investimento", "empresa", "inflacao", "comercio", "industria", "pib", "mercado", "negocio", "financeiro", "imposto", "varejo", "exportacao", "importacao", "salario", "juros", "selic", "bolsa de valores", "acoes"],
+  "Segurança": ["policia", "policial", "crime", "roubo", "furto", "homicidio", "prisao", "trafico", "violencia", "operacao policial", "delegacia", "assalto", "morto a tiros", "morta a tiros", "baleado", "baleada", "assassinado", "assassinada", "assassinato", "mataram", "execucao", "tiroteio", "vitima fatal", "encontrado morto", "encontrada morta", "facada", "esfaqueado", "esfaqueada", "sequestro", "extorsao", "milicia", "apreensao de drogas", "arma de fogo", "foragido", "suspeito de"],
+  "Saúde": ["saude", "hospital", "upa", "posto de saude", "vacina", "medico", "sus", "doenca", "covid", "dengue", "clinica", "atendimento medico", "emergencia", "ambulancia", "internado", "internada", "leito", "cirurgia", "epidemia", "surto"],
+  "Educação": ["escola", "educacao", "aluno", "professor", "universidade", "ensino", "matricula", "colegio", "creche", "vestibular", "enem", "merenda escolar", "ensino fundamental", "ensino medio"],
+  "Turismo": ["turismo", "turista", "turistas", "praia", "hotel", "pousada", "viagem", "feriado", "temporada", "ponto turistico", "visitantes"],
+  "Meio Ambiente": ["meio ambiente", "sustentabilidade", "reciclagem", "poluicao", "preservacao", "ambiental", "desmatamento", "queimada", "incendio florestal", "area de preservacao", "saneamento", "residuos solidos", "mudanca climatica"],
+  "Tecnologia": ["tecnologia", "startup", "internet", "aplicativo", "digital", "inovacao", "inteligencia artificial", "software", "ciberseguranca", "plataforma digital"],
+  "Cultura": ["cultura", "show", "festival", "teatro", "musica", "cinema", "exposicao", "artista", "carnaval", "patrimonio historico", "museu", "biblioteca", "literatura"],
+  "Esportes": ["futebol", "esporte", "campeonato", "jogo", "time", "atleta", "copa", "olimpiada", "gol", "vitoria", "derrota", "placar", "selecao", "torcida", "estadio", "maratona"],
 };
-
 function classificarCategoria(titulo, resumo) {
   const texto = removerAcentos(`${titulo} ${resumo}`.toLowerCase());
   for (const [categoria, palavras] of Object.entries(CATEGORIA_PALAVRAS)) {
