@@ -317,13 +317,6 @@ async function upsertNoticias(items, fonte, limite) {
   return rows.length;
 }
 
-function getLimite(nomeF) {
-  for (const grupo of Object.values(GRUPOS)) {
-    if (grupo.fontes.has(nomeF)) return grupo.limite;
-  }
-  return LIMITE_PADRAO;
-}
-
 // ─── Handler ───────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   const tokenHeader = req.headers.authorization === `Bearer ${CRON_SECRET}`;
