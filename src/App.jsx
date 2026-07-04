@@ -15,7 +15,7 @@ const REGIONS = [
 ];
 
 const VALID_REGION_IDS = REGIONS.map(r => r.id).filter(id => id !== "todos");
-const CARDS_INICIAIS = 36;
+const CARDS_INICIAIS = 24;
 const CARDS_MAIS = 12;
 const MAX_HOME_CARDS = 60;
 
