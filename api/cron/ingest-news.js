@@ -18,6 +18,7 @@ const GRUPOS = {
       "G1 Região dos Lagos", "G1 Norte Fluminense",
       "G1 Região Serrana", "G1 Sul do Rio e Costa Verde",
       "R7 Rio de Janeiro", "Diário do Rio",
+      "TechTudo", "Canaltech", "TecMundo", "CinePOP",
     ]),
   },
   B: {
@@ -25,15 +26,12 @@ const GRUPOS = {
     limite: 10,
     fontes: new Set([
       "RC24H", "Portal Ururau", "Lagos Informa", "Diário do Vale",
-      "O São Gonçalo", "Campos 24Horas", "Expresso Carioca",
-      "Jornal Hora H", "Enfoco", "SF Notícias", "RJNEWS",
+      "O São Gonçalo", "Expresso Carioca", "Jornal Hora H",
       "Notícias de Nova Iguaçu", "Notícias da Baixada",
       "Jornal Destaque da Baixada", "Portal Goytacazes",
       "Fonte Certa", "Tribuna Sul Fluminense",
-      "A Voz da Serra", "A Voz da Cidade",
-      "Rlagos Notícias", "Folha dos Lagos",
-      "A Tribuna", "Foco Regional", "Meia Hora",
-      "Nova Friburgo em Foco",
+      "Folha dos Lagos", "Portal Viu", "Clique Diário",
+      "Tempo Real RJ", "Manchete RJ", "Jornal do Estado RJ",
     ]),
   },
   C: {
@@ -43,9 +41,12 @@ const GRUPOS = {
       "Prefeitura do Rio", "Prefeitura de Niterói",
       "Prefeitura de Cabo Frio", "Prefeitura de Volta Redonda",
       "Prefeitura de Casimiro de Abreu", "Prefeitura de Macaé",
+      "Prefeitura de Itatiaia", "Prefeitura de Japeri",
+      "Prefeitura de Mangaratiba", "Prefeitura de Maricá",
     ]),
   },
 };
+
 const LIMITE_PADRAO = 10;
 
 function getLimite(nomefonte) {
