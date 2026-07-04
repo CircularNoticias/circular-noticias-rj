@@ -420,7 +420,7 @@ export default function App() {
             </div>
           </div>
           <p style={{ margin:0, fontSize:13, color:"#94a3b8", fontStyle:"italic" }}>
-            Tudo o que acontece no Estado do Rio de Janeiro, em um só lugar.
+            Centro Inteligente de Notícias do Estado do Rio de Janeiro.
           </p>
           <div style={{ width:40, height:1, background:"rgba(255,255,255,0.1)" }}/>
           <div style={{ fontSize:13, color:"#64748b" }}>
@@ -430,7 +430,7 @@ export default function App() {
             </a>
           </div>
           <p style={{ margin:0, fontSize:12, color:"#64748b", fontWeight:600 }}>
-            Centro Inteligente de Notícias do Estado do Rio de Janeiro.
+            Diretor Responsável: Agnaldo Frederico.
           </p>
           <p style={{ margin:0, fontSize:11, color:"#475569" }}>
             © 2026 Circular Notícias RJ – Todos os direitos reservados.
