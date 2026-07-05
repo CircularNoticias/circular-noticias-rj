@@ -1,14 +1,13 @@
 // api/cron/ingest-news.js
 //
 // Roda conforme schedule configurado (cron-job.org + vercel.json).
-// Fluxo: busca fontes ativas -> determina grupo (A/B/C) -> aplica limite
-// por grupo -> parseia RSS -> limpa HTML -> extrai imagem -> classifica
-// categoria e região/cidade -> insere em `noticias` no Supabase.
+// Inclui: grupos de fontes com limites, limpeza HTML, extração de imagem,
+// classificação de categoria (inclui Mobilidade), detecção de cidade/região,
+// e registro de saúde das fontes em `fontes_saude`.
 
 import { XMLParser } from "fast-xml-parser";
 
-// ─── Configuração de grupos e limites ──────────────────────────────────────
-// Edite aqui para ajustar limites sem alterar a lógica principal.
+// ─── Grupos de fontes e limites ────────────────────────────────────────────
 const GRUPOS = {
   A: {
     nome: "Grandes Portais",
@@ -50,25 +49,31 @@ const GRUPOS = {
     ]),
   },
 };
-   
-
 const LIMITE_PADRAO = 10;
 
-function getLimite(nomefonte) {
-  for (const grupo of Object.values(GRUPOS)) {
-    if (grupo.fontes.has(nomefonte)) return grupo.limite;
+function getLimite(nome) {
+  for (const g of Object.values(GRUPOS)) {
+    if (g.fontes.has(nome)) return g.limite;
   }
   return LIMITE_PADRAO;
 }
 
+function getGrupo(nome) {
+  for (const [id, g] of Object.entries(GRUPOS)) {
+    if (g.fontes.has(nome)) return id;
+  }
+  return "B";
+}
+
 // ─── Constantes ────────────────────────────────────────────────────────────
-const NOTICIAS_TABLE = "noticias";
-const FONTES_TABLE   = "fontes";
-const SUPABASE_URL   = process.env.SUPABASE_URL;
-const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const FEED_API_KEY   = process.env.FEED_API_KEY;
-const CRON_SECRET    = process.env.CRON_SECRET;
-const FEED_BASE      = "https://rssgenfix-7qjtnnnf.manus.space";
+const NOTICIAS_TABLE  = "noticias";
+const FONTES_TABLE    = "fontes";
+const SAUDE_TABLE     = "fontes_saude";
+const SUPABASE_URL    = process.env.SUPABASE_URL;
+const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const FEED_API_KEY    = process.env.FEED_API_KEY;
+const CRON_SECRET     = process.env.CRON_SECRET;
+const FEED_BASE       = "https://rssgenfix-7qjtnnnf.manus.space";
 
 const ALLOWLIST = new Set([
   "g1.globo.com", "noticias.r7.com", "meiahora.com.br",
@@ -76,7 +81,7 @@ const ALLOWLIST = new Set([
   "campos24horas.com.br", "ururau.com.br", "focoregional.com.br",
 ]);
 
-// ─── Utilitários de texto ──────────────────────────────────────────────────
+// ─── Utilitários ────────────────────────────────────────────────────────────
 function semAcentos(s) {
   return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -116,16 +121,17 @@ function extrairImagem(item) {
 
 // ─── Classificação de categoria ────────────────────────────────────────────
 const PALAVRAS = {
-  "Política":     ["prefeito","prefeitura","vereador","camara municipal","governador","alerj","eleicao","eleitoral","candidato","deputado","senador","ministro","presidente","partido","stf","congresso","secretario","projeto de lei","sancionar","veto"],
-  "Economia":     ["economia","emprego","desemprego","investimento","empresa","inflacao","comercio","industria","pib","mercado","negocio","financeiro","imposto","varejo","exportacao","salario","juros"],
+  "Mobilidade":   ["transito","congestionamento","interdicao","bloqueio","acidente de transito","obra na via","desvio","sinal","semaforo","onibus","metro","trem","barca","brt","vlt","rodovia","autoestrada","ponte","tunel","via expressa","presidente dutra","linha amarela","linha vermelha","alerj trafego","trafego","estacionamento","multa de transito","licenciamento","ipva","detran"],
+  "Política":     ["prefeito","prefeitura","vereador","camara municipal","governador","alerj","eleicao","eleitoral","candidato","deputado","senador","ministro","presidente","partido","stf","congresso","secretario","projeto de lei","sancionar","veto","licitacao","concurso publico"],
+  "Economia":     ["economia","emprego","desemprego","investimento","empresa","inflacao","comercio","industria","pib","mercado","negocio","financeiro","imposto","varejo","exportacao","salario","juros","sebrae","empreendedor","startup"],
   "Segurança":    ["policia","policial","crime","roubo","furto","homicidio","prisao","trafico","violencia","operacao policial","delegacia","assalto","morto a tiros","baleado","assassinado","assassinato","mataram","execucao","tiroteio","vitima fatal","facada","sequestro","milicia","arma de fogo","foragido"],
   "Saúde":        ["saude","hospital","upa","posto de saude","vacina","medico","sus","doenca","covid","dengue","clinica","emergencia","ambulancia","internado","leito","cirurgia","epidemia","surto"],
   "Educação":     ["escola","educacao","aluno","professor","universidade","ensino","matricula","colegio","creche","vestibular","enem","merenda escolar"],
-  "Turismo":      ["turismo","turista","turistas","praia","hotel","pousada","viagem","feriado","temporada","ponto turistico","visitantes"],
-  "Meio Ambiente":["meio ambiente","sustentabilidade","reciclagem","poluicao","preservacao","ambiental","desmatamento","queimada","incendio florestal","saneamento","residuos solidos","mudanca climatica"],
+  "Turismo":      ["turismo","turista","turistas","praia","hotel","pousada","viagem","feriado","temporada","ponto turistico","visitantes","carnaval","festa","festival"],
+  "Meio Ambiente":["meio ambiente","sustentabilidade","reciclagem","poluicao","preservacao","ambiental","desmatamento","queimada","incendio florestal","saneamento","residuos solidos","mudanca climatica","enchente","alagamento","deslizamento"],
   "Tecnologia":   ["tecnologia","startup","internet","aplicativo","digital","inovacao","inteligencia artificial","software","ciberseguranca"],
-  "Cultura":      ["cultura","show","festival","teatro","musica","cinema","exposicao","artista","carnaval","patrimonio historico","museu","biblioteca","literatura"],
-  "Esportes":     ["futebol","esporte","campeonato","jogo","time","atleta","copa","olimpiada","gol","vitoria","derrota","placar","selecao","torcida","estadio","maratona"],
+  "Cultura":      ["cultura","show","teatro","musica","cinema","exposicao","artista","patrimonio historico","museu","biblioteca","literatura","artesanato"],
+  "Esportes":     ["futebol","esporte","campeonato","jogo","time","atleta","copa","olimpiada","gol","vitoria","derrota","placar","selecao","torcida","estadio","maratona","vasco","flamengo","fluminense","botafogo","america"],
 };
 
 function classificarCategoria(titulo, resumo) {
@@ -137,9 +143,7 @@ function classificarCategoria(titulo, resumo) {
 }
 
 // ─── Detecção de cidade/região ─────────────────────────────────────────────
-// Inclui Baixada Fluminense como região própria (separada da Metropolitana)
 const CIDADES = [
-  // Metropolitana (excluindo Baixada)
   ["rio de janeiro","Rio de Janeiro","metropolitana"],
   ["niteroi","Niterói","metropolitana"],
   ["sao goncalo","São Gonçalo","metropolitana"],
@@ -148,7 +152,6 @@ const CIDADES = [
   ["mage","Magé","metropolitana"],
   ["guapimirim","Guapimirim","metropolitana"],
   ["rio bonito","Rio Bonito","metropolitana"],
-  // Baixada Fluminense (região própria)
   ["nova iguacu","Nova Iguaçu","baixada"],
   ["duque de caxias","Duque de Caxias","baixada"],
   ["belford roxo","Belford Roxo","baixada"],
@@ -160,7 +163,6 @@ const CIDADES = [
   ["seropedica","Seropédica","baixada"],
   ["itaguai","Itaguaí","baixada"],
   ["paracambi","Paracambi","baixada"],
-  // Lagos
   ["cabo frio","Cabo Frio","lagos"],
   ["arraial do cabo","Arraial do Cabo","lagos"],
   ["buzios","Búzios","lagos"],
@@ -169,48 +171,31 @@ const CIDADES = [
   ["araruama","Araruama","lagos"],
   ["iguaba grande","Iguaba Grande","lagos"],
   ["saquarema","Saquarema","lagos"],
-  ["silva jardim","Silva Jardim","lagos"],
   ["casimiro de abreu","Casimiro de Abreu","lagos"],
-  // Serrana
   ["petropolis","Petrópolis","serrana"],
   ["teresopolis","Teresópolis","serrana"],
   ["nova friburgo","Nova Friburgo","serrana"],
   ["cachoeiras de macacu","Cachoeiras de Macacu","serrana"],
-  ["sumidouro","Sumidouro","serrana"],
   ["cordeiro","Cordeiro","serrana"],
   ["bom jardim","Bom Jardim","serrana"],
-  // Norte Fluminense
   ["campos dos goytacazes","Campos dos Goytacazes","norte"],
   ["macae","Macaé","norte"],
   ["sao joao da barra","São João da Barra","norte"],
   ["quissama","Quissamã","norte"],
-  ["carapebus","Carapebus","norte"],
-  ["cardoso moreira","Cardoso Moreira","norte"],
-  ["sao fidelis","São Fidélis","norte"],
-  // Noroeste
   ["itaperuna","Itaperuna","noroeste"],
   ["santo antonio de padua","Santo Antônio de Pádua","noroeste"],
   ["miracema","Miracema","noroeste"],
   ["natividade","Natividade","noroeste"],
-  ["bom jesus do itabapoana","Bom Jesus do Itabapoana","noroeste"],
-  ["porciuncula","Porciúncula","noroeste"],
-  // Costa Verde
   ["angra dos reis","Angra dos Reis","costa-verde"],
   ["paraty","Paraty","costa-verde"],
   ["mangaratiba","Mangaratiba","costa-verde"],
-  // Médio Paraíba
   ["volta redonda","Volta Redonda","medio-paraiba"],
   ["barra mansa","Barra Mansa","medio-paraiba"],
   ["resende","Resende","medio-paraiba"],
-  ["barra do pirai","Barra do Piraí","medio-paraiba"],
-  ["pinheiral","Pinheiral","medio-paraiba"],
   ["itatiaia","Itatiaia","medio-paraiba"],
-  // Centro-Sul
   ["vassouras","Vassouras","centro-sul"],
   ["valenca","Valença","centro-sul"],
   ["miguel pereira","Miguel Pereira","centro-sul"],
-  ["paty do alferes","Paty do Alferes","centro-sul"],
-  ["mendes","Mendes","centro-sul"],
 ];
 
 function detectarCidadeRegiao(titulo, resumo) {
@@ -221,17 +206,17 @@ function detectarCidadeRegiao(titulo, resumo) {
   return null;
 }
 
-function regiaoFallback(regiaoFonte) {
-  if (!regiaoFonte) return "metropolitana";
-  const r = semAcentos(regiaoFonte.toLowerCase());
-  if (r.includes("baixada"))                          return "baixada";
-  if (r.includes("lagos"))                            return "lagos";
-  if (r.includes("serrana"))                          return "serrana";
-  if (r.includes("noroeste"))                         return "noroeste";
-  if (r.includes("norte"))                            return "norte";
-  if (r.includes("costa verde") || r.includes("sul")) return "costa-verde";
-  if (r.includes("paraiba"))                          return "medio-paraiba";
-  if (r.includes("centro-sul") || r.includes("centro sul")) return "centro-sul";
+function regiaoFallback(r) {
+  if (!r) return "metropolitana";
+  const s = semAcentos(r.toLowerCase());
+  if (s.includes("baixada"))    return "baixada";
+  if (s.includes("lagos"))      return "lagos";
+  if (s.includes("serrana"))    return "serrana";
+  if (s.includes("noroeste"))   return "noroeste";
+  if (s.includes("norte"))      return "norte";
+  if (s.includes("costa verde") || s.includes("costa-verde")) return "costa-verde";
+  if (s.includes("paraiba"))    return "medio-paraiba";
+  if (s.includes("centro-sul") || s.includes("centro sul")) return "centro-sul";
   return "metropolitana";
 }
 
@@ -261,16 +246,20 @@ async function fetchFontesAtivas() {
 }
 
 async function fetchRssNativo(url) {
+  const inicio = Date.now();
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!res.ok) { console.error(`RSS ${url}: ${res.status}`); return null; }
-  return res.text();
+  const ms = Date.now() - inicio;
+  if (!res.ok) return { xml: null, ms };
+  return { xml: await res.text(), ms };
 }
 
 async function fetchFeedXml(sourceUrl) {
+  const inicio = Date.now();
   const url = `${FEED_BASE}/api/feed?url=${encodeURIComponent(sourceUrl)}&key=${FEED_API_KEY}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) { console.error(`Feed ${sourceUrl}: ${res.status}`); return null; }
-  return res.text();
+  const ms = Date.now() - inicio;
+  if (!res.ok) return { xml: null, ms };
+  return { xml: await res.text(), ms };
 }
 
 function parseRssItems(xml) {
@@ -279,27 +268,26 @@ function parseRssItems(xml) {
   return Array.isArray(items) ? items : [items];
 }
 
-// ─── Inserção ──────────────────────────────────────────────────────────────
+// ─── Inserção de notícias ──────────────────────────────────────────────────
 async function upsertNoticias(items, fonte, limite) {
   const fatia = items.slice(0, limite);
   if (!fatia.length) return 0;
 
   const rows = fatia.map(item => {
-    const titulo  = limparHtml(item.title);
-    const resumo  = limparHtml(item.description);
-    const loc     = detectarCidadeRegiao(titulo, resumo);
+    const titulo = limparHtml(item.title);
+    const resumo = limparHtml(item.description);
+    const loc    = detectarCidadeRegiao(titulo, resumo);
     return {
-      titulo,
-      resumo,
-      url_original:   item.link || "",
-      fonte_id:       fonte.id,
-      fonte_nome:     fonte.nome,
-      regiao:         loc ? loc.regiao : regiaoFallback(fonte.regiao),
-      cidade:         loc ? loc.cidade : null,
-      categoria:      classificarCategoria(titulo, resumo),
-      imagem_url:     extrairImagem(item),
+      titulo, resumo,
+      url_original:    item.link || "",
+      fonte_id:        fonte.id,
+      fonte_nome:      fonte.nome,
+      regiao:          loc ? loc.regiao : regiaoFallback(fonte.regiao),
+      cidade:          loc ? loc.cidade : null,
+      categoria:       classificarCategoria(titulo, resumo),
+      imagem_url:      extrairImagem(item),
       data_publicacao: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-      processado_ia:  false,
+      processado_ia:   false,
     };
   });
 
@@ -323,6 +311,22 @@ async function upsertNoticias(items, fonte, limite) {
   return rows.length;
 }
 
+// ─── Registro de saúde ─────────────────────────────────────────────────────
+async function registrarSaude(registros) {
+  if (!registros.length) return;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${SAUDE_TABLE}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(registros),
+  });
+  if (!res.ok) console.error(`Saúde insert: ${res.status}`);
+}
+
 // ─── Handler ───────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   const tokenHeader = req.headers.authorization === `Bearer ${CRON_SECRET}`;
@@ -334,21 +338,38 @@ export default async function handler(req, res) {
   try {
     const fontes = await fetchFontesAtivas();
     let totalInseridas = 0;
-    const resultados = [];
+    const resultados  = [];
+    const registrosSaude = [];
 
     for (const fonte of fontes) {
       const estrategia = getEstrategia(fonte);
+
       if (estrategia === "sem_suporte") {
         resultados.push({ fonte: fonte.nome, status: "sem_suporte" });
+        registrosSaude.push({
+          fonte_id: fonte.id, fonte_nome: fonte.nome,
+          status: "sem_suporte", itens_encontrados: 0,
+          itens_inseridos: 0, tempo_resposta_ms: 0, falhas_consecutivas: 0,
+        });
         continue;
       }
 
-      const xml = estrategia === "rss_nativo"
-        ? await fetchRssNativo(fonte.rss_url)
-        : await fetchFeedXml(normalizarUrl(fonte.url));
+      let xml = null, ms = 0;
+      try {
+        const resultado = estrategia === "rss_nativo"
+          ? await fetchRssNativo(fonte.rss_url)
+          : await fetchFeedXml(normalizarUrl(fonte.url));
+        xml = resultado.xml;
+        ms  = resultado.ms;
+      } catch { /* xml permanece null */ }
 
       if (!xml) {
         resultados.push({ fonte: fonte.nome, status: "erro_fetch", estrategia });
+        registrosSaude.push({
+          fonte_id: fonte.id, fonte_nome: fonte.nome,
+          status: "erro_fetch", itens_encontrados: 0,
+          itens_inseridos: 0, tempo_resposta_ms: ms, falhas_consecutivas: 1,
+        });
         continue;
       }
 
@@ -356,19 +377,33 @@ export default async function handler(req, res) {
       const limite   = getLimite(fonte.nome);
       const inseridas = await upsertNoticias(items, fonte, limite);
       totalInseridas += inseridas;
-      resultados.push({ fonte: fonte.nome, estrategia, grupo: getGrupo(fonte.nome), itens: items.length, limite, inseridas });
+
+      resultados.push({
+        fonte: fonte.nome, estrategia,
+        grupo: getGrupo(fonte.nome),
+        itens: items.length, limite, inseridas,
+        tempo_ms: ms,
+      });
+
+      registrosSaude.push({
+        fonte_id: fonte.id, fonte_nome: fonte.nome,
+        status: "ok", itens_encontrados: items.length,
+        itens_inseridos: inseridas,
+        tempo_resposta_ms: ms, falhas_consecutivas: 0,
+      });
     }
 
-    return res.status(200).json({ ok: true, totalFontes: fontes.length, totalInseridas, resultados });
+    // Registrar saúde em lote
+    await registrarSaude(registrosSaude);
+
+    return res.status(200).json({
+      ok: true,
+      totalFontes: fontes.length,
+      totalInseridas,
+      resultados,
+    });
   } catch (err) {
     console.error("Cron error:", err);
     return res.status(500).json({ error: err.message });
   }
-}
-
-function getGrupo(nome) {
-  for (const [id, g] of Object.entries(GRUPOS)) {
-    if (g.fontes.has(nome)) return id;
-  }
-  return "B";
 }
