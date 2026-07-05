@@ -32,6 +32,10 @@ const GRUPOS = {
       "Fonte Certa", "Tribuna Sul Fluminense",
       "Folha dos Lagos", "Portal Viu", "Clique Diário",
       "Tempo Real RJ", "Manchete RJ", "Jornal do Estado RJ",
+      "Revista Ana Maria", "Contigo", "Blog do Artesanato",
+      "Futuro da Saúde", "Tempo.com", "Sebrae RJ",
+      "Net Vasco", "Fogão Net", "Coluna do Fla", "Net Flu",
+      "Carnavalesco",
     ]),
   },
   C: {
@@ -41,11 +45,12 @@ const GRUPOS = {
       "Prefeitura do Rio", "Prefeitura de Niterói",
       "Prefeitura de Cabo Frio", "Prefeitura de Volta Redonda",
       "Prefeitura de Casimiro de Abreu", "Prefeitura de Macaé",
-      "Prefeitura de Itatiaia", "Prefeitura de Japeri",
-      "Prefeitura de Mangaratiba", "Prefeitura de Maricá",
+      "Prefeitura de Japeri", "Prefeitura de Mangaratiba",
+      "Prefeitura de Maricá", "Prefeitura de Cabo Frio (Oficial)",
     ]),
   },
 };
+   
 
 const LIMITE_PADRAO = 10;
 
