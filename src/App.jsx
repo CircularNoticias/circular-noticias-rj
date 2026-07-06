@@ -86,30 +86,52 @@ function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4) {
     idx++;
   }
 
-  // 3) Espaçar por fonte: evita a mesma fonte aparecer em cards muito próximos.
-  // Quando encontra uma repetição próxima, troca de posição com um card mais à
-  // frente de outra fonte — nunca descarta, só reordena.
+  // 3) Espaçar por fonte com um algoritmo greedy de "cooldown": a cada posição,
+  // escolhe a fonte disponível (fora do período de espera) com MAIS itens
+  // pendentes. Isso garante o melhor espaçamento possível mesmo quando poucas
+  // fontes concentram um volume grande de notícias — muito mais robusto do
+  // que tentar um swap pontual com janela fixa.
   const MIN_GAP = 3;
-  const LOOKAHEAD = 15;
-  const espacado = [...intercalado];
-  const ultimaPosicaoPorFonte = new Map();
 
-  for (let pos = 0; pos < espacado.length; pos++) {
-    const atual = espacado[pos];
-    const ultima = ultimaPosicaoPorFonte.get(atual.source);
-    if (ultima !== undefined && pos - ultima < MIN_GAP) {
-      for (let look = pos + 1; look < Math.min(espacado.length, pos + LOOKAHEAD); look++) {
-        const candidato = espacado[look];
-        const ultimaCandidato = ultimaPosicaoPorFonte.get(candidato.source);
-        const podeTrocar = candidato.source !== atual.source
-          && (ultimaCandidato === undefined || pos - ultimaCandidato >= MIN_GAP);
-        if (podeTrocar) {
-          [espacado[pos], espacado[look]] = [espacado[look], espacado[pos]];
-          break;
-        }
+  const porFonte = new Map();
+  for (const n of intercalado) {
+    if (!porFonte.has(n.source)) porFonte.set(n.source, []);
+    porFonte.get(n.source).push(n);
+  }
+  const fontes = [...porFonte.keys()];
+
+  const espacado = [];
+  const liberaEm = new Map(); // fonte -> posição em que volta a ficar disponível
+  let posicao = 0;
+  const totalItens = intercalado.length;
+
+  while (espacado.length < totalItens) {
+    let melhorFonte = null;
+    let melhorQtd = -1;
+    for (const fonte of fontes) {
+      const fila = porFonte.get(fonte);
+      if (fila.length === 0) continue;
+      const disponivelEm = liberaEm.get(fonte) ?? 0;
+      if (disponivelEm > posicao) continue; // ainda em cooldown
+      if (fila.length > melhorQtd) { melhorQtd = fila.length; melhorFonte = fonte; }
+    }
+
+    // Se nenhuma fonte está livre do cooldown (dados muito concentrados),
+    // usa a que sai do cooldown mais cedo — evita travar e nunca descarta itens.
+    if (melhorFonte === null) {
+      let menorLibera = Infinity;
+      for (const fonte of fontes) {
+        const fila = porFonte.get(fonte);
+        if (fila.length === 0) continue;
+        const disponivelEm = liberaEm.get(fonte) ?? 0;
+        if (disponivelEm < menorLibera) { menorLibera = disponivelEm; melhorFonte = fonte; }
       }
     }
-    ultimaPosicaoPorFonte.set(espacado[pos].source, pos);
+
+    const item = porFonte.get(melhorFonte).shift();
+    espacado.push(item);
+    liberaEm.set(melhorFonte, posicao + MIN_GAP);
+    posicao++;
   }
 
   // 4) Limitar fontes oficiais por "página" (blocos de itemsPerPage): quando um
@@ -450,23 +472,4 @@ function AppContent({ currentPage, goToPage }) {
     : news.filter(n => n.region === activeRegion);
 
   // ─── Paginação ──────────────────────────────────────────────────────────
-  // Paginação por URL só se aplica em "Todo o Estado". Com filtro de região
-  // ativo, mantém o comportamento atual: lista única, sem paginação.
-  const paginacaoAtiva = activeRegion === "todos";
-  const PAGE1_SIZE = 32;
-
-  // Feed inteiro, uma única vez: intercalado por categoria, espaçado por
-  // fonte e com limite de oficiais por bloco de página — cobrindo TODAS as
-  // páginas, não só a primeira. Nenhuma notícia é descartada, só reordenada.
-  const feedCurado = useMemo(
-    () => curarFeedCompleto(pool, PAGE1_SIZE, 4),
-    [pool]
-  );
-
-  const totalPages = paginacaoAtiva
-    ? feedCurado.length <= PAGE1_SIZE
-      ? 1
-      : 1 + Math.ceil((feedCurado.length - PAGE1_SIZE) / ITEMS_PER_PAGE)
-    : 1;
-
-  const cards = !paginaca
+  // Paginação por URL só se a
