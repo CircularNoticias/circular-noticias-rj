@@ -86,11 +86,12 @@ function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4) {
     idx++;
   }
 
-  // 3) Espaçar por fonte com um algoritmo greedy de "cooldown": a cada posição,
-  // escolhe a fonte disponível (fora do período de espera) com MAIS itens
-  // pendentes. Isso garante o melhor espaçamento possível mesmo quando poucas
-  // fontes concentram um volume grande de notícias — muito mais robusto do
-  // que tentar um swap pontual com janela fixa.
+  // 3) Seleção final, item por item, respeitando DUAS regras ao mesmo tempo:
+  //    - cooldown por fonte (nunca a mesma fonte antes de MIN_GAP posições);
+  //    - limite de oficiais por bloco de página (nunca mais que maxOficiais
+  //      oficiais dentro de um mesmo bloco de itemsPerPage).
+  // Tudo numa única passada — nenhum item é movido depois de posicionado,
+  // então uma regra nunca desfaz o trabalho da outra.
   const MIN_GAP = 3;
 
   const porFonte = new Map();
@@ -100,58 +101,40 @@ function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4) {
   }
   const fontes = [...porFonte.keys()];
 
-  const espacado = [];
-  const liberaEm = new Map(); // fonte -> posição em que volta a ficar disponível
+  const resultado = [];
+  const liberaEm = new Map();
   let posicao = 0;
   const totalItens = intercalado.length;
 
-  while (espacado.length < totalItens) {
-    let melhorFonte = null;
-    let melhorQtd = -1;
+  const escolherFonte = ({ respeitarOficiais, respeitarCooldown }) => {
+    const inicioBloco = Math.floor(posicao / itemsPerPage) * itemsPerPage;
+    const oficiaisNoBloco = respeitarOficiais
+      ? resultado.slice(inicioBloco, posicao).filter(n => n.isOficial).length
+      : -Infinity;
+
+    let melhor = null, melhorQtd = -1;
     for (const fonte of fontes) {
       const fila = porFonte.get(fonte);
       if (fila.length === 0) continue;
-      const disponivelEm = liberaEm.get(fonte) ?? 0;
-      if (disponivelEm > posicao) continue; // ainda em cooldown
-      if (fila.length > melhorQtd) { melhorQtd = fila.length; melhorFonte = fonte; }
+      if (respeitarCooldown && (liberaEm.get(fonte) ?? 0) > posicao) continue;
+      if (respeitarOficiais && fila[0].isOficial && oficiaisNoBloco >= maxOficiais) continue;
+      if (fila.length > melhorQtd) { melhorQtd = fila.length; melhor = fonte; }
     }
+    return melhor;
+  };
 
-    // Se nenhuma fonte está livre do cooldown (dados muito concentrados),
-    // usa a que sai do cooldown mais cedo — evita travar e nunca descarta itens.
-    if (melhorFonte === null) {
-      let menorLibera = Infinity;
-      for (const fonte of fontes) {
-        const fila = porFonte.get(fonte);
-        if (fila.length === 0) continue;
-        const disponivelEm = liberaEm.get(fonte) ?? 0;
-        if (disponivelEm < menorLibera) { menorLibera = disponivelEm; melhorFonte = fonte; }
-      }
-    }
+  while (resultado.length < totalItens) {
+    // Tenta respeitando as duas regras; se não achar candidato, relaxa
+    // primeiro o limite de oficiais e, por último, o cooldown — nessa ordem,
+    // pra nunca travar e nunca descartar notícia.
+    let fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true });
+    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: true });
+    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: false });
 
-    const item = porFonte.get(melhorFonte).shift();
-    espacado.push(item);
-    liberaEm.set(melhorFonte, posicao + MIN_GAP);
+    const item = porFonte.get(fonte).shift();
+    resultado.push(item);
+    liberaEm.set(fonte, posicao + MIN_GAP);
     posicao++;
-  }
-
-  // 4) Limitar fontes oficiais por "página" (blocos de itemsPerPage): quando um
-  // bloco já tem maxOficiais, adia o excedente pra mais à frente, fora do bloco.
-  const resultado = [...espacado];
-  for (let inicioPagina = 0; inicioPagina < resultado.length; inicioPagina += itemsPerPage) {
-    const fimPagina = Math.min(inicioPagina + itemsPerPage, resultado.length);
-    let oficiaisNoBloco = 0;
-    for (let pos = inicioPagina; pos < fimPagina; pos++) {
-      if (!resultado[pos].isOficial) continue;
-      oficiaisNoBloco++;
-      if (oficiaisNoBloco > maxOficiais) {
-        for (let look = fimPagina; look < resultado.length; look++) {
-          if (!resultado[look].isOficial) {
-            [resultado[pos], resultado[look]] = [resultado[look], resultado[pos]];
-            break;
-          }
-        }
-      }
-    }
   }
 
   return resultado;
@@ -472,4 +455,13 @@ function AppContent({ currentPage, goToPage }) {
     : news.filter(n => n.region === activeRegion);
 
   // ─── Paginação ──────────────────────────────────────────────────────────
-  // Paginação por URL só se a
+  // Paginação por URL só se aplica em "Todo o Estado". Com filtro de região
+  // ativo, mantém o comportamento atual: lista única, sem paginação.
+  const paginacaoAtiva = activeRegion === "todos";
+  const PAGE1_SIZE = 32;
+
+  // Feed inteiro, uma única vez: intercalado por categoria, espaçado por
+  // fonte e com limite de oficiais por bloco de página — cobrindo TODAS as
+  // páginas, não só a primeira. Nenhuma notícia é descartada, só reordenada.
+  const feedCurado = useMemo(
+    () => curarFeedCompleto(pool, PA
