@@ -1,8 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Routes, Route, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 
+// ─── Paginação ──────────────────────────────────────────────────────────────
+const ITEMS_PER_PAGE = 24; // notícias por página a partir da página 2
+
 const REGIONS = [
-  { id: "todos",         label: "Home" },
+  { id: "todos",         label: "Todo o Estado" },
   { id: "metropolitana", label: "Região Metropolitana" },
   { id: "baixada",       label: "Baixada Fluminense" },
   { id: "lagos",         label: "Região dos Lagos" },
@@ -15,44 +19,51 @@ const REGIONS = [
 ];
 
 const VALID_REGION_IDS = REGIONS.map(r => r.id).filter(id => id !== "todos");
-const CARDS_INICIAIS = 24;
-const CARDS_MAIS = 12;
-const MAX_HOME_CARDS = 60;
 
 const LAGOS_CITIES = [
   "Cabo Frio","Arraial do Cabo","Armação dos Búzios",
   "São Pedro da Aldeia","Araruama","Saquarema","Iguaba Grande","Casimiro de Abreu",
 ];
+
 const BAIXADA_CITIES = [
   "Nova Iguaçu","Duque de Caxias","Belford Roxo","Nilópolis",
   "Mesquita","Queimados","São João de Meriti","Japeri","Seropédica","Itaguaí",
 ];
 
+// Fontes Oficiais — limitadas na Home
 const FONTES_OFICIAIS = new Set([
   "Prefeitura do Rio","Prefeitura de Niterói","Prefeitura de Cabo Frio",
-  "Prefeitura de Volta Redonda","Prefeitura de Casimiro de Abreu",
-  "Prefeitura de Macaé","Prefeitura de Itatiaia","Prefeitura de Japeri",
-  "Prefeitura de Mangaratiba","Prefeitura de Maricá",
+  "Prefeitura de Volta Redonda","Prefeitura de Casimiro de Abreu","Prefeitura de Macaé",
 ]);
 
-// ─── Algoritmo editorial ────────────────────────────────────────────────────
+// ─── Ordem de prioridade das categorias (rotaciona a cada sessão) ───────────
+// O leitor NÃO vê essas categorias — são só para organização interna.
 const PRIORIDADE_BASE = [
   "Segurança","Política","Saúde","Economia",
   "Educação","Turismo","Cultura","Esportes",
   "Meio Ambiente","Tecnologia","Geral",
 ];
 
+// Rotaciona o array por N posições
 function rotacionar(arr, n) {
   const pos = n % arr.length;
   return [...arr.slice(pos), ...arr.slice(0, pos)];
 }
 
-function getPrioridade() {
-  return rotacionar(PRIORIDADE_BASE, new Date().getHours() % PRIORIDADE_BASE.length);
+// A cada hora do dia, uma prioridade diferente está em primeiro
+function getPrioridadeAtual() {
+  const hora = new Date().getHours();
+  return rotacionar(PRIORIDADE_BASE, hora % PRIORIDADE_BASE.length);
 }
 
-function organizarHome(pool, maxCards = MAX_HOME_CARDS, maxOficiais = 6) {
-  const prioridade = getPrioridade();
+// ─── Algoritmo editorial ────────────────────────────────────────────────────
+// Organiza o pool por categoria (prioridade rotativa) e dentro de cada
+// categoria garante diversidade de fontes (1 por fonte).
+// O leitor vê um fluxo contínuo — sem títulos nem rótulos de categoria.
+function organizarHome(pool, maxCards = 32, maxOficiais = 4) {
+  const prioridade = getPrioridadeAtual();
+
+  // Agrupar notícias por categoria
   const grupos = {};
   for (const cat of prioridade) grupos[cat] = [];
   for (const n of pool) {
@@ -60,41 +71,49 @@ function organizarHome(pool, maxCards = MAX_HOME_CARDS, maxOficiais = 6) {
     grupos[cat].push(n);
   }
 
+  // Dentro de cada grupo: embaralha levemente e limita 1 por fonte
   const pick = (lista) => {
     const shuffled = [...lista].sort(() => Math.random() - 0.5);
     const usadas = new Set();
-    return shuffled.filter(n => {
-      if (usadas.has(n.source)) return false;
-      usadas.add(n.source);
-      return true;
-    });
+    const resultado = [];
+    for (const n of shuffled) {
+      if (!usadas.has(n.source)) {
+        usadas.add(n.source);
+        resultado.push(n);
+      }
+    }
+    return resultado;
   };
 
+  // Intercalar: 1 de cada categoria por vez (round-robin por prioridade)
   const listas = prioridade.map(cat => pick(grupos[cat] || []));
   const resultado = [];
-  const fontesSel = new Set();
-  let oficiais = 0;
+  let fontesSelecionadas = new Set();
+  let oficiaisCount = 0;
   let i = 0;
 
   while (resultado.length < maxCards) {
     let adicionou = false;
     for (let p = 0; p < listas.length && resultado.length < maxCards; p++) {
-      const n = listas[p][i];
-      if (!n) continue;
-      if (fontesSel.has(n.source)) continue;
-      if (n.isOficial && oficiais >= maxOficiais) continue;
-      fontesSel.add(n.source);
-      if (n.isOficial) oficiais++;
-      resultado.push(n);
-      adicionou = true;
+      const lista = listas[p];
+      if (i < lista.length) {
+        const n = lista[i];
+        if (fontesSelecionadas.has(n.source)) continue;
+        if (n.isOficial && oficiaisCount >= maxOficiais) continue;
+        fontesSelecionadas.add(n.source);
+        if (n.isOficial) oficiaisCount++;
+        resultado.push(n);
+        adicionou = true;
+      }
     }
     i++;
     if (!adicionou) break;
   }
+
   return resultado;
 }
 
-// ─── Visual ──────────────────────────────────────────────────────────────────
+// ─── Identidade visual ──────────────────────────────────────────────────────
 const categoryColors = {
   "Turismo":"#0ea5e9","Meio Ambiente":"#22c55e","Saúde":"#f43f5e",
   "Segurança":"#f97316","Política":"#8b5cf6","Economia":"#eab308",
@@ -103,17 +122,17 @@ const categoryColors = {
 };
 
 const categoryGradients = {
-  "Segurança":"linear-gradient(135deg,#7c2d12,#ea580c)",
-  "Política":"linear-gradient(135deg,#3b0764,#7c3aed)",
-  "Saúde":"linear-gradient(135deg,#881337,#f43f5e)",
-  "Esportes":"linear-gradient(135deg,#064e3b,#10b981)",
-  "Economia":"linear-gradient(135deg,#713f12,#eab308)",
-  "Educação":"linear-gradient(135deg,#0c4a6e,#06b6d4)",
-  "Cultura":"linear-gradient(135deg,#831843,#ec4899)",
-  "Turismo":"linear-gradient(135deg,#0c4a6e,#0ea5e9)",
+  "Segurança":    "linear-gradient(135deg,#7c2d12,#ea580c)",
+  "Política":     "linear-gradient(135deg,#3b0764,#7c3aed)",
+  "Saúde":        "linear-gradient(135deg,#881337,#f43f5e)",
+  "Esportes":     "linear-gradient(135deg,#064e3b,#10b981)",
+  "Economia":     "linear-gradient(135deg,#713f12,#eab308)",
+  "Educação":     "linear-gradient(135deg,#0c4a6e,#06b6d4)",
+  "Cultura":      "linear-gradient(135deg,#831843,#ec4899)",
+  "Turismo":      "linear-gradient(135deg,#0c4a6e,#0ea5e9)",
   "Meio Ambiente":"linear-gradient(135deg,#14532d,#22c55e)",
-  "Tecnologia":"linear-gradient(135deg,#1e1b4b,#6366f1)",
-  "Geral":"linear-gradient(135deg,#0f172a,#1e3a5f)",
+  "Tecnologia":   "linear-gradient(135deg,#1e1b4b,#6366f1)",
+  "Geral":        "linear-gradient(135deg,#0f172a,#1e3a5f)",
 };
 
 const categoryIcons = {
@@ -122,25 +141,29 @@ const categoryIcons = {
   "Meio Ambiente":"🌿","Tecnologia":"💻","Geral":"📰",
 };
 
+// ─── Mapa cidade → região ───────────────────────────────────────────────────
 const CITY_TO_REGION = {
   "Rio de Janeiro":"metropolitana","Niterói":"metropolitana",
   "São Gonçalo":"metropolitana","Itaboraí":"metropolitana",
   "Maricá":"metropolitana","Magé":"metropolitana",
   "Guapimirim":"metropolitana","Rio Bonito":"metropolitana",
   "Nova Iguaçu":"baixada","Duque de Caxias":"baixada",
-  "Belford Roxo":"baixada","Nilópolis":"baixada","Mesquita":"baixada",
-  "Queimados":"baixada","São João de Meriti":"baixada","Japeri":"baixada",
+  "Belford Roxo":"baixada","Nilópolis":"baixada",
+  "Mesquita":"baixada","Queimados":"baixada",
+  "São João de Meriti":"baixada","Japeri":"baixada",
   "Seropédica":"baixada","Itaguaí":"baixada","Paracambi":"baixada",
   "Cabo Frio":"lagos","Arraial do Cabo":"lagos","Armação dos Búzios":"lagos",
   "Búzios":"lagos","São Pedro da Aldeia":"lagos","Araruama":"lagos",
   "Saquarema":"lagos","Iguaba Grande":"lagos","Casimiro de Abreu":"lagos",
   "Petrópolis":"serrana","Teresópolis":"serrana","Nova Friburgo":"serrana",
   "Cachoeiras de Macacu":"serrana","Cordeiro":"serrana","Bom Jardim":"serrana",
-  "Campos dos Goytacazes":"norte","Macaé":"norte","São João da Barra":"norte",
-  "Itaperuna":"noroeste","Santo Antônio de Pádua":"noroeste","Miracema":"noroeste",
+  "Campos dos Goytacazes":"norte","Macaé":"norte",
+  "São João da Barra":"norte","Quissamã":"norte","Carapebus":"norte",
+  "Itaperuna":"noroeste","Santo Antônio de Pádua":"noroeste",
+  "Miracema":"noroeste","Natividade":"noroeste",
   "Angra dos Reis":"costa-verde","Paraty":"costa-verde","Mangaratiba":"costa-verde",
   "Volta Redonda":"medio-paraiba","Barra Mansa":"medio-paraiba",
-  "Resende":"medio-paraiba","Itatiaia":"medio-paraiba",
+  "Resende":"medio-paraiba","Barra do Piraí":"medio-paraiba","Itatiaia":"medio-paraiba",
   "Vassouras":"centro-sul","Valença":"centro-sul","Miguel Pereira":"centro-sul",
 };
 
@@ -185,15 +208,21 @@ function formatDateTime(iso) {
 function mapRow(row) {
   const { date, time } = formatDateTime(row.created_at);
   return {
-    id: row.id, region: resolveRegion(row), city: row.cidade || "",
-    category: row.categoria || "Geral", headline: stripHtml(row.titulo),
-    summary: stripHtml(row.resumo), source: row.fonte_nome || "",
-    sourceUrl: row.url_original || "", image: row.imagem_url || null,
-    isOficial: FONTES_OFICIAIS.has(row.fonte_nome), date, time,
+    id:        row.id,
+    region:    resolveRegion(row),
+    city:      row.cidade || "",
+    category:  row.categoria || "Geral",
+    headline:  stripHtml(row.titulo),
+    summary:   stripHtml(row.resumo),
+    source:    row.fonte_nome || "",
+    sourceUrl: row.url_original || "",
+    image:     row.imagem_url || null,
+    isOficial: FONTES_OFICIAIS.has(row.fonte_nome),
+    date, time,
   };
 }
 
-// ─── Componentes ──────────────────────────────────────────────────────────────
+// ─── Componentes ────────────────────────────────────────────────────────────
 function Logo({ size = 42 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
@@ -228,33 +257,35 @@ function NewsCard({ news }) {
       style={{ background:"#fff", borderRadius:12, boxShadow:"0 2px 12px rgba(0,0,0,0.07)", overflow:"hidden", cursor:"pointer", transition:"transform 0.15s,box-shadow 0.15s", display:"flex", flexDirection:"column", border:"1px solid #f1f5f9" }}
       onMouseEnter={e => { e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 6px 24px rgba(0,0,0,0.12)"; }}
       onMouseLeave={e => { e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.07)"; }}>
-      <div style={{ width:"100%", height:160, position:"relative", background: showImg ? "#e2e8f0" : bgImg, flexShrink:0 }}>
+      <div style={{ width:"100%", height:140, position:"relative", background: showImg ? "#e2e8f0" : bgImg, flexShrink:0 }}>
         {showImg
           ? <img src={news.image} alt={news.headline} onError={() => setImgErr(true)} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
           : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:6 }}>
-              <span style={{ fontSize:36 }}>{icon}</span>
+              <span style={{ fontSize:32 }}>{icon}</span>
               <span style={{ color:"rgba(255,255,255,0.7)", fontSize:10, fontWeight:700, letterSpacing:1 }}>{news.category.toUpperCase()}</span>
             </div>
         }
         <div style={{ position:"absolute", bottom:0, left:0, height:4, width:"100%", background:color }}/>
         {news.isOficial && (
-          <div style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.6)", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:8 }}>OFICIAL</div>
+          <div style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.6)", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:8 }}>
+            OFICIAL
+          </div>
         )}
       </div>
-      <div style={{ padding:"16px 18px 18px", flex:1, display:"flex", flexDirection:"column", gap:10 }}>
+      <div style={{ padding:"14px 16px 16px", flex:1, display:"flex", flexDirection:"column", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
           <span style={{ background:color+"18", color, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{news.category}</span>
           {news.city && <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>📍 {news.city}</span>}
         </div>
-        <h3 style={{ margin:0, fontSize:17, fontWeight:800, color:"#1e293b", lineHeight:1.4 }}>{news.headline}</h3>
-        <div style={{ display:"flex", alignItems:"flex-start", gap:6, background:"#f8fafc", borderRadius:8, padding:"10px 12px" }}>
-          <span style={{ color:"#6366f1", marginTop:2, fontSize:13 }}>✦</span>
-          <p style={{ margin:0, fontSize:14, color:"#475569", lineHeight:1.65, flex:1 }}>
-            {(news.summary || "").slice(0, 160)}{(news.summary || "").length > 160 ? "..." : ""}
+        <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:"#1e293b", lineHeight:1.4 }}>{news.headline}</h3>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:6, background:"#f8fafc", borderRadius:8, padding:"8px 10px" }}>
+          <span style={{ color:"#6366f1", marginTop:1, fontSize:12 }}>✦</span>
+          <p style={{ margin:0, fontSize:12, color:"#475569", lineHeight:1.55, flex:1 }}>
+            {(news.summary || "").slice(0, 120)}{(news.summary || "").length > 120 ? "..." : ""}
           </p>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:"auto" }}>
-          <span style={{ fontSize:12, color:"#0ea5e9", fontWeight:700 }}>{news.source}</span>
+          <span style={{ fontSize:11, color:"#0ea5e9", fontWeight:600 }}>{news.source}</span>
           <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>{news.date} · {news.time}</span>
         </div>
       </div>
@@ -262,13 +293,113 @@ function NewsCard({ news }) {
   );
 }
 
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ─── Componente de Paginação ────────────────────────────────────────────────
+function Pagination({ currentPage, totalPages, onNavigate }) {
+  if (totalPages <= 1) return null;
+
+  // Gera lista de páginas visíveis com reticências
+  const getPageNumbers = () => {
+    const delta = 1;
+    const range = [];
+    const rangeWithDots = [];
+    let last = null;
+
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+        range.push(i);
+      }
+    }
+    for (const i of range) {
+      if (last !== null) {
+        if (i - last === 2) rangeWithDots.push(last + 1);
+        else if (i - last > 2) rangeWithDots.push("...");
+      }
+      rangeWithDots.push(i);
+      last = i;
+    }
+    return rangeWithDots;
+  };
+
+  const btnBase = {
+    border: "1px solid #e2e8f0", borderRadius: 8, padding: "7px 12px",
+    fontSize: 13, fontWeight: 600, cursor: "pointer", background: "#fff", color: "#1e293b",
+  };
+
+  return (
+    <nav aria-label="Navegação de páginas" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "24px 0 8px" }}>
+      <button
+        onClick={() => onNavigate(currentPage - 1)}
+        disabled={currentPage === 1}
+        aria-label="Página anterior"
+        style={{ ...btnBase, opacity: currentPage === 1 ? 0.4 : 1, cursor: currentPage === 1 ? "not-allowed" : "pointer" }}>
+        « Anterior
+      </button>
+
+      {getPageNumbers().map((p, idx) =>
+        p === "..." ? (
+          <span key={`dots-${idx}`} style={{ padding: "0 4px", color: "#94a3b8", fontSize: 13 }}>...</span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onNavigate(p)}
+            aria-current={p === currentPage ? "page" : undefined}
+            style={{
+              ...btnBase,
+              minWidth: 36,
+              background: p === currentPage ? "#3b82f6" : "#fff",
+              color: p === currentPage ? "#fff" : "#1e293b",
+              borderColor: p === currentPage ? "#3b82f6" : "#e2e8f0",
+            }}>
+            {p}
+          </button>
+        )
+      )}
+
+      <button
+        onClick={() => onNavigate(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        aria-label="Próxima página"
+        style={{ ...btnBase, opacity: currentPage === totalPages ? 0.4 : 1, cursor: currentPage === totalPages ? "not-allowed" : "pointer" }}>
+        Próxima »
+      </button>
+    </nav>
+  );
+}
+
+// ─── App: define as rotas / e /pagina/:num ─────────────────────────────────
+function PageWrapper() {
+  const params = useParams();
+  const navigate = useNavigate();
+  const currentPage = Math.max(1, parseInt(params.num, 10) || 1);
+
+  const goToPage = (p) => {
+    if (p < 1) return;
+    navigate(p === 1 ? "/" : `/pagina/${p}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return <AppContent currentPage={currentPage} goToPage={goToPage} />;
+}
+
 export default function App() {
-  const [activeRegion, setActiveRegion] = useState("todos");
-  const [news,         setNews]         = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState(null);
-  const [visiveis,     setVisiveis]     = useState(CARDS_INICIAIS);
+  return (
+    <Routes>
+      <Route path="/" element={<PageWrapper />} />
+      <Route path="/pagina/:num" element={<PageWrapper />} />
+    </Routes>
+  );
+}
+
+// ─── Conteúdo principal ─────────────────────────────────────────────────────
+function AppContent({ currentPage, goToPage }) {
+  const [activeRegion,  setActiveRegion]  = useState("todos");
+  const [search,        setSearch]        = useState("");
+  const [searchQuery,   setSearchQuery]   = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState(null);
+  const [news,          setNews]          = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -291,19 +422,81 @@ export default function App() {
     return () => { mounted = false; };
   }, []);
 
-  // Resetar cards visíveis ao trocar região
-  useEffect(() => { setVisiveis(CARDS_INICIAIS); }, [activeRegion]);
-
+  // Pool filtrado por região
   const pool = activeRegion === "todos"
     ? news
     : news.filter(n => n.region === activeRegion);
 
-  const todosCards = organizarHome(pool, MAX_HOME_CARDS, 6);
-  const cardsMostrados = todosCards.slice(0, visiveis);
-  const temMais = visiveis < todosCards.length;
+  // ─── Paginação ──────────────────────────────────────────────────────────
+  // Paginação por URL só se aplica em "Todo o Estado". Com filtro de região
+  // ativo, mantém o comportamento atual: lista única, sem paginação.
+  const paginacaoAtiva = activeRegion === "todos";
+
+  // Página 1: curadoria editorial (organizarHome) sobre o pool completo.
+  const cardsPagina1 = useMemo(() => organizarHome(pool, 32, 4), [pool]);
+
+  // Páginas 2+: restante do pool (excluindo o que já saiu na página 1),
+  // em ordem cronológica pura, fatiado em blocos de ITEMS_PER_PAGE.
+  // Isso evita duplicar notícias entre a página 1 (curada) e as seguintes,
+  // sem precisar de uma nova consulta ao Supabase por página.
+  const idsUsadosPagina1 = useMemo(() => new Set(cardsPagina1.map(n => n.id)), [cardsPagina1]);
+  const poolRestante = useMemo(
+    () => pool.filter(n => !idsUsadosPagina1.has(n.id)),
+    [pool, idsUsadosPagina1]
+  );
+
+  const totalPages = paginacaoAtiva
+    ? 1 + Math.ceil(poolRestante.length / ITEMS_PER_PAGE)
+    : 1;
+
+  const cards = !paginacaoAtiva
+    ? organizarHome(pool, 32, 4) // região filtrada: comportamento atual, sem paginação
+    : currentPage === 1
+      ? cardsPagina1
+      : poolRestante.slice(
+          (currentPage - 2) * ITEMS_PER_PAGE,
+          (currentPage - 1) * ITEMS_PER_PAGE
+        );
+
+  // Título da página (SEO)
+  useEffect(() => {
+    document.title = currentPage === 1
+      ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
+      : `Circular Notícias RJ — Página ${currentPage}`;
+  }, [currentPage]);
+
+  // Se o usuário estiver numa página que deixou de existir (ex: dados
+  // mudaram), volta pra página 1 em vez de mostrar uma tela vazia.
+  useEffect(() => {
+    if (!loading && paginacaoAtiva && currentPage > totalPages && totalPages > 0) {
+      goToPage(1);
+    }
+  }, [loading, paginacaoAtiva, currentPage, totalPages]);
+
+  const handleSearch = async () => {
+    if (!search.trim()) return;
+    setSearchQuery(search); setSearchLoading(true); setSearchResults(null);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1000,
+          system:`Você é o assistente de busca do portal Circular Notícias RJ. Analise a consulta e retorne JSON:
+{"interpretation":"O que o usuário busca (1 frase)","regions":["regiões relevantes"],"categories":["categorias relevantes"],"suggestion":"Resposta contextual sobre o tema no RJ (2-3 frases)"}
+Responda APENAS com JSON válido, sem markdown.`,
+          messages:[{ role:"user", content:`Busca: "${search}"` }]
+        })
+      });
+      const data = await res.json();
+      setSearchResults(JSON.parse(data.content.map(i=>i.text||"").join("")));
+    } catch {
+      setSearchResults({ interpretation:search, suggestion:"Mostrando resultados relacionados à sua busca.", regions:[], categories:[] });
+    }
+    setSearchLoading(false); setSearch("");
+  };
 
   const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday:"short", day:"2-digit", month:"short", year:"numeric" });
-  const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "Home";
+  const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "Todo o Estado";
 
   return (
     <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" }}>
@@ -319,18 +512,22 @@ export default function App() {
             </div>
             <div style={{ color:"#64748b", fontSize:11 }}>{todayLabel}</div>
           </div>
-
-          {/* Slogan */}
-          <div style={{ paddingBottom:12, paddingTop:2 }}>
-            <p style={{ margin:0, color:"rgba(255,255,255,0.65)", fontSize:13, fontStyle:"italic", letterSpacing:0.3 }}>
-              Tudo o que acontece no Estado do Rio de Janeiro, em um só lugar.
-            </p>
+          <div style={{ display:"flex", gap:8, paddingBottom:10 }}>
+            <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key==="Enter" && handleSearch()}
+              placeholder="🔍  Busque por cidade, tema ou assunto..."
+              style={{ flex:1, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, padding:"9px 14px", color:"#fff", fontSize:13, outline:"none", minWidth:0 }}/>
+            <button onClick={handleSearch} disabled={searchLoading}
+              style={{ background:"#3b82f6", border:"none", borderRadius:8, padding:"9px 18px", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
+              {searchLoading ? "..." : "Buscar"}
+            </button>
           </div>
-
-          {/* Regiões */}
           <div style={{ display:"flex", gap:4, overflowX:"auto", paddingBottom:10, scrollbarWidth:"none" }}>
             {REGIONS.map(r => (
-              <button key={r.id} onClick={() => setActiveRegion(r.id)}
+              <button key={r.id} onClick={() => {
+                setActiveRegion(r.id);
+                setSearchResults(null);
+                if (r.id !== "todos") goToPage(1); // filtro de região não usa paginação por URL
+              }}
                 style={{ background:activeRegion===r.id?"#3b82f6":"transparent", border:"1px solid "+(activeRegion===r.id?"#3b82f6":"rgba(255,255,255,0.12)"), borderRadius:6, padding:"5px 12px", color:activeRegion===r.id?"#fff":"#94a3b8", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s" }}>
                 {r.label}
               </button>
@@ -340,6 +537,18 @@ export default function App() {
       </header>
 
       <div style={{ maxWidth:1100, margin:"0 auto", padding:"20px 16px" }}>
+        {searchResults && (
+          <div style={{ background:"#faf5ff", border:"1px solid #e9d5ff", borderRadius:12, padding:"16px 20px", marginBottom:20 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <span style={{ fontSize:16 }}>✨</span>
+              <span style={{ fontWeight:700, color:"#6d28d9", fontSize:14 }}>Busca: "{searchQuery}"</span>
+              <button onClick={() => setSearchResults(null)} style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:"#94a3b8", fontSize:18 }}>×</button>
+            </div>
+            <p style={{ margin:"0 0 8px", fontSize:13, color:"#4c1d95" }}><strong>Interpretação:</strong> {searchResults.interpretation}</p>
+            <p style={{ margin:0, fontSize:13, color:"#5b21b6", lineHeight:1.6 }}>{searchResults.suggestion}</p>
+          </div>
+        )}
+
         {error && (
           <div style={{ background:"#fef2f2", border:"1px solid #fecaca", borderRadius:12, padding:"14px 18px", marginBottom:20, color:"#b91c1c", fontSize:13 }}>
             ⚠️ {error}
@@ -368,49 +577,38 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-              <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
-              <h2 style={{ margin:0, fontSize:15, fontWeight:800, color:"#1e293b", letterSpacing:-0.3 }}>
-                {activeRegion === "todos" ? "HOME" : regionLabel.toUpperCase()}
-              </h2>
-              <span style={{ background:"#fee2e2", color:"#dc2626", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10 }}>AO VIVO</span>
-              <span style={{ background:"#f1f5f9", color:"#64748b", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10, marginLeft:"auto" }}>
-                {cardsMostrados.length} notícia{cardsMostrados.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-
-            {cardsMostrados.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"40px 20px", color:"#94a3b8" }}>
-                <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
-                <p style={{ margin:0, fontSize:14 }}>Nenhuma notícia encontrada para esta região.</p>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
+                <h2 style={{ margin:0, fontSize:15, fontWeight:800, color:"#1e293b", letterSpacing:-0.3 }}>
+                  {activeRegion === "todos" ? "DESTAQUES DO ESTADO" : regionLabel.toUpperCase()}
+                </h2>
+                <span style={{ background:"#fee2e2", color:"#dc2626", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10 }}>AO VIVO</span>
+                <span style={{ background:"#f1f5f9", color:"#64748b", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10, marginLeft:"auto" }}>
+                  {cards.length} notícia{cards.length !== 1 ? "s" : ""}
+                </span>
               </div>
-            ) : (
-              <>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
-                  {cardsMostrados.map(n => <NewsCard key={n.id} news={n}/>)}
-                </div>
 
-                {/* Botão Mais notícias */}
-                {temMais && (
-                  <div style={{ textAlign:"center", marginTop:28 }}>
-                    <button onClick={() => setVisiveis(v => v + CARDS_MAIS)}
-                      style={{ background:"#1e293b", color:"#fff", border:"none", borderRadius:10, padding:"12px 32px", fontSize:14, fontWeight:700, cursor:"pointer", transition:"background 0.15s", letterSpacing:0.3 }}
-                      onMouseEnter={e => e.currentTarget.style.background="#3b82f6"}
-                      onMouseLeave={e => e.currentTarget.style.background="#1e293b"}>
-                      ↓ Mais notícias
-                    </button>
-                    <p style={{ margin:"8px 0 0", fontSize:12, color:"#94a3b8" }}>
-                      Mostrando {cardsMostrados.length} de {todosCards.length}
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
+              {cards.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"40px 20px", color:"#94a3b8" }}>
+                  <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
+                  <p style={{ margin:0, fontSize:14 }}>Nenhuma notícia encontrada para esta região.</p>
+                </div>
+              ) : (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+                  {cards.map(n => <NewsCard key={n.id} news={n}/>)}
+                </div>
+              )}
+
+              {paginacaoAtiva && (
+                <Pagination currentPage={currentPage} totalPages={totalPages} onNavigate={goToPage} />
+              )}
+            </div>
           </>
         )}
       </div>
 
-      <footer style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", marginTop:24, padding:"36px 20px 24px" }}>
+      <footer style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", marginTop:16, padding:"36px 20px 24px" }}>
         <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:12, textAlign:"center" }}>
           <div style={{ display:"flex", alignItems:"center", gap:12 }}>
             <Logo size={38}/>
@@ -420,7 +618,7 @@ export default function App() {
             </div>
           </div>
           <p style={{ margin:0, fontSize:13, color:"#94a3b8", fontStyle:"italic" }}>
-            Centro Inteligente de Notícias do Estado do Rio de Janeiro.
+            Tudo o que acontece no Estado do Rio de Janeiro, em um só lugar.
           </p>
           <div style={{ width:40, height:1, background:"rgba(255,255,255,0.1)" }}/>
           <div style={{ fontSize:13, color:"#64748b" }}>
@@ -430,7 +628,7 @@ export default function App() {
             </a>
           </div>
           <p style={{ margin:0, fontSize:12, color:"#64748b", fontWeight:600 }}>
-            Diretor Responsável: Agnaldo Frederico.
+            Centro Inteligente de Notícias do Estado do Rio de Janeiro.
           </p>
           <p style={{ margin:0, fontSize:11, color:"#475569" }}>
             © 2026 Circular Notícias RJ – Todos os direitos reservados.
