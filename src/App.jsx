@@ -464,4 +464,213 @@ function AppContent({ currentPage, goToPage }) {
   // fonte e com limite de oficiais por bloco de página — cobrindo TODAS as
   // páginas, não só a primeira. Nenhuma notícia é descartada, só reordenada.
   const feedCurado = useMemo(
-    () => curarFeedCompleto(pool, PA
+    () => curarFeedCompleto(pool, PAGE1_SIZE, 4),
+    [pool]
+  );
+
+  const totalPages = paginacaoAtiva
+    ? feedCurado.length <= PAGE1_SIZE
+      ? 1
+      : 1 + Math.ceil((feedCurado.length - PAGE1_SIZE) / ITEMS_PER_PAGE)
+    : 1;
+
+  const cards = !paginacaoAtiva
+    ? feedCurado.slice(0, PAGE1_SIZE) // região filtrada: comportamento atual, sem paginação
+    : currentPage === 1
+      ? feedCurado.slice(0, PAGE1_SIZE)
+      : feedCurado.slice(
+          PAGE1_SIZE + (currentPage - 2) * ITEMS_PER_PAGE,
+          PAGE1_SIZE + (currentPage - 1) * ITEMS_PER_PAGE
+        );
+
+  // Título da página (SEO)
+  useEffect(() => {
+    document.title = currentPage === 1
+      ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
+      : `Circular Notícias RJ — Página ${currentPage}`;
+  }, [currentPage]);
+
+  // Se o usuário estiver numa página que deixou de existir (ex: dados
+  // mudaram), volta pra página 1 em vez de mostrar uma tela vazia.
+  useEffect(() => {
+    if (!loading && paginacaoAtiva && currentPage > totalPages && totalPages > 0) {
+      goToPage(1);
+    }
+  }, [loading, paginacaoAtiva, currentPage, totalPages]);
+
+  const handleSearch = async () => {
+    if (!search.trim()) return;
+    setSearchQuery(search); setSearchLoading(true); setSearchResults(null);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1000,
+          system:`Você é o assistente de busca do portal Circular Notícias RJ. Analise a consulta e retorne JSON:
+{"interpretation":"O que o usuário busca (1 frase)","regions":["regiões relevantes"],"categories":["categorias relevantes"],"suggestion":"Resposta contextual sobre o tema no RJ (2-3 frases)"}
+Responda APENAS com JSON válido, sem markdown.`,
+          messages:[{ role:"user", content:`Busca: "${search}"` }]
+        })
+      });
+      const data = await res.json();
+      setSearchResults(JSON.parse(data.content.map(i=>i.text||"").join("")));
+    } catch {
+      setSearchResults({ interpretation:search, suggestion:"Mostrando resultados relacionados à sua busca.", regions:[], categories:[] });
+    }
+    setSearchLoading(false); setSearch("");
+  };
+
+  const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday:"short", day:"2-digit", month:"short", year:"numeric" });
+  const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "Todo o Estado";
+
+  return (
+    <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" }}>
+      <header style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", padding:"0 16px", boxShadow:"0 2px 20px rgba(0,0,0,0.3)" }}>
+        <div style={{ maxWidth:1100, margin:"0 auto" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingTop:14, paddingBottom:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <Logo size={42}/>
+              <div>
+                <div style={{ color:"#fff", fontWeight:900, fontSize:20, letterSpacing:1, lineHeight:1 }}>CIRCULAR</div>
+                <div style={{ color:"#38bdf8", fontWeight:700, fontSize:11, letterSpacing:3 }}>NOTÍCIAS RJ</div>
+              </div>
+            </div>
+            <div style={{ color:"#64748b", fontSize:11 }}>{todayLabel}</div>
+          </div>
+          <div style={{ display:"flex", gap:8, paddingBottom:10 }}>
+            <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key==="Enter" && handleSearch()}
+              placeholder="🔍  Busque por cidade, tema ou assunto..."
+              style={{ flex:1, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, padding:"9px 14px", color:"#fff", fontSize:13, outline:"none", minWidth:0 }}/>
+            <button onClick={handleSearch} disabled={searchLoading}
+              style={{ background:"#3b82f6", border:"none", borderRadius:8, padding:"9px 18px", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
+              {searchLoading ? "..." : "Buscar"}
+            </button>
+          </div>
+          <div style={{ display:"flex", gap:4, overflowX:"auto", paddingBottom:10, scrollbarWidth:"none" }}>
+            {REGIONS.map(r => (
+              <button key={r.id} onClick={() => {
+                setActiveRegion(r.id);
+                setSearchResults(null);
+                if (r.id !== "todos") goToPage(1); // filtro de região não usa paginação por URL
+              }}
+                style={{ background:activeRegion===r.id?"#3b82f6":"transparent", border:"1px solid "+(activeRegion===r.id?"#3b82f6":"rgba(255,255,255,0.12)"), borderRadius:6, padding:"5px 12px", color:activeRegion===r.id?"#fff":"#94a3b8", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s" }}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <div style={{ maxWidth:1100, margin:"0 auto", padding:"20px 16px" }}>
+        {searchResults && (
+          <div style={{ background:"#faf5ff", border:"1px solid #e9d5ff", borderRadius:12, padding:"16px 20px", marginBottom:20 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <span style={{ fontSize:16 }}>✨</span>
+              <span style={{ fontWeight:700, color:"#6d28d9", fontSize:14 }}>Busca: "{searchQuery}"</span>
+              <button onClick={() => setSearchResults(null)} style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:"#94a3b8", fontSize:18 }}>×</button>
+            </div>
+            <p style={{ margin:"0 0 8px", fontSize:13, color:"#4c1d95" }}><strong>Interpretação:</strong> {searchResults.interpretation}</p>
+            <p style={{ margin:0, fontSize:13, color:"#5b21b6", lineHeight:1.6 }}>{searchResults.suggestion}</p>
+          </div>
+        )}
+
+        {error && (
+          <div style={{ background:"#fef2f2", border:"1px solid #fecaca", borderRadius:12, padding:"14px 18px", marginBottom:20, color:"#b91c1c", fontSize:13 }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ textAlign:"center", padding:"60px 20px", color:"#94a3b8" }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>⏳</div>
+            <p style={{ margin:0, fontSize:14 }}>Carregando notícias...</p>
+          </div>
+        ) : (
+          <>
+            {activeRegion === "lagos" && (
+              <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:12, scrollbarWidth:"none" }}>
+                {LAGOS_CITIES.map(c => (
+                  <span key={c} style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap" }}>📍 {c}</span>
+                ))}
+              </div>
+            )}
+            {activeRegion === "baixada" && (
+              <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:12, scrollbarWidth:"none" }}>
+                {BAIXADA_CITIES.map(c => (
+                  <span key={c} style={{ background:"#fce7f3", color:"#9d174d", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap" }}>📍 {c}</span>
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginBottom:12 }}>
+              {/* ─── PAINEL DE DIAGNÓSTICO TEMPORÁRIO — remover depois de resolver ─── */}
+              {paginacaoAtiva && (
+                <div style={{ background:"#1e293b", color:"#e2e8f0", fontSize:11, fontFamily:"monospace", padding:10, borderRadius:8, marginBottom:12, lineHeight:1.6 }}>
+                  <strong>🔧 DEBUG (remover depois)</strong><br/>
+                  pool.length: {pool.length}<br/>
+                  feedCurado.length: {feedCurado.length}<br/>
+                  currentPage: {currentPage} | totalPages: {totalPages}<br/>
+                  feedCurado[0..7].source: {feedCurado.slice(0,8).map(n=>n.source).join(", ")}<br/>
+                  cards[0..7].source (o que está sendo exibido): {cards.slice(0,8).map(n=>n.source).join(", ")}
+                </div>
+              )}
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
+                <h2 style={{ margin:0, fontSize:15, fontWeight:800, color:"#1e293b", letterSpacing:-0.3 }}>
+                  {activeRegion === "todos" ? "DESTAQUES DO ESTADO" : regionLabel.toUpperCase()}
+                </h2>
+                <span style={{ background:"#fee2e2", color:"#dc2626", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10 }}>AO VIVO</span>
+                <span style={{ background:"#f1f5f9", color:"#64748b", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10, marginLeft:"auto" }}>
+                  {cards.length} notícia{cards.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {cards.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"40px 20px", color:"#94a3b8" }}>
+                  <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
+                  <p style={{ margin:0, fontSize:14 }}>Nenhuma notícia encontrada para esta região.</p>
+                </div>
+              ) : (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+                  {cards.map(n => <NewsCard key={n.id} news={n}/>)}
+                </div>
+              )}
+
+              {paginacaoAtiva && (
+                <Pagination currentPage={currentPage} totalPages={totalPages} onNavigate={goToPage} />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      <footer style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", marginTop:16, padding:"36px 20px 24px" }}>
+        <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:12, textAlign:"center" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <Logo size={38}/>
+            <div>
+              <div style={{ color:"#fff", fontWeight:900, fontSize:17, letterSpacing:1 }}>CIRCULAR</div>
+              <div style={{ color:"#38bdf8", fontWeight:700, fontSize:10, letterSpacing:3 }}>NOTÍCIAS RJ</div>
+            </div>
+          </div>
+          <p style={{ margin:0, fontSize:13, color:"#94a3b8", fontStyle:"italic" }}>
+            Tudo o que acontece no Estado do Rio de Janeiro, em um só lugar.
+          </p>
+          <div style={{ width:40, height:1, background:"rgba(255,255,255,0.1)" }}/>
+          <div style={{ fontSize:13, color:"#64748b" }}>
+            Contato:{" "}
+            <a href="mailto:circularnoticias@gmail.com" style={{ color:"#38bdf8", fontWeight:600, textDecoration:"none" }}>
+              circularnoticias@gmail.com
+            </a>
+          </div>
+          <p style={{ margin:0, fontSize:12, color:"#64748b", fontWeight:600 }}>
+            Centro Inteligente de Notícias do Estado do Rio de Janeiro.
+          </p>
+          <p style={{ margin:0, fontSize:11, color:"#475569" }}>
+            © 2026 Circular Notícias RJ – Todos os direitos reservados.
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
