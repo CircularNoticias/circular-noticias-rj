@@ -35,6 +35,10 @@ const GRUPOS = {
       "Futuro da Saúde", "Tempo.com", "Sebrae RJ",
       "Net Vasco", "Fogão Net", "Coluna do Fla", "Net Flu",
       "Carnavalesco",
+      // ─── Novas fontes regionais (RJ) ───
+      "Serra News RJ", "Jornal do Estado do Rio", "Net Diário",
+      "RJ Interior", "Folha do Interior", "A Cidade Costa Verde",
+      "Diário Carioca", "Agenda do Poder", "Rádio Tupi", "América Rio",
     ]),
   },
   C: {
@@ -46,6 +50,23 @@ const GRUPOS = {
       "Prefeitura de Casimiro de Abreu", "Prefeitura de Macaé",
       "Prefeitura de Japeri", "Prefeitura de Mangaratiba",
       "Prefeitura de Maricá", "Prefeitura de Cabo Frio (Oficial)",
+      // ─── Novas prefeituras ───
+      "Prefeitura de Nilópolis", "Prefeitura de Paracambi",
+      "Prefeitura de Porciúncula", "Prefeitura de Quatis",
+      "Prefeitura de Queimados", "Prefeitura de Quissamã",
+      "Prefeitura de Rio Bonito", "Centro de Operações Rio",
+    ]),
+  },
+  D: {
+    nome: "Fontes Genéricas (nacionais)",
+    // Limite mais baixo: essas fontes não são o carro-chefe do produto,
+    // entram só como tempero ocasional (ver App.jsx pra como isso afeta
+    // a curadoria de exibição — este limite aqui só reduz o volume que
+    // é sequer buscado do feed).
+    limite: 3,
+    fontes: new Set([
+      "Tua Saúde", "Guia do Estudante (Abril)", "Fuxico TV", "Caras",
+      "Revista PEGN (Globo)", "Saúde Abril", "Casa da Ciência", "InfoMoney",
     ]),
   },
 };
@@ -186,6 +207,7 @@ const CIDADES = [
   ["santo antonio de padua","Santo Antônio de Pádua","noroeste"],
   ["miracema","Miracema","noroeste"],
   ["natividade","Natividade","noroeste"],
+  ["porciuncula","Porciúncula","noroeste"],
   ["angra dos reis","Angra dos Reis","costa-verde"],
   ["paraty","Paraty","costa-verde"],
   ["mangaratiba","Mangaratiba","costa-verde"],
@@ -193,6 +215,7 @@ const CIDADES = [
   ["barra mansa","Barra Mansa","medio-paraiba"],
   ["resende","Resende","medio-paraiba"],
   ["itatiaia","Itatiaia","medio-paraiba"],
+  ["quatis","Quatis","medio-paraiba"],
   ["vassouras","Vassouras","centro-sul"],
   ["valenca","Valença","centro-sul"],
   ["miguel pereira","Miguel Pereira","centro-sul"],
