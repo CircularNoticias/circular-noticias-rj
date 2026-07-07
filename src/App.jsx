@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Routes, Route, useParams, useNavigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 
 // ─── Paginação ──────────────────────────────────────────────────────────────
@@ -393,11 +393,18 @@ function Pagination({ currentPage, totalPages, onNavigate }) {
   );
 }
 
-// ─── App: define as rotas / e /pagina/:num ─────────────────────────────────
+// ─── App: define a rota única (coringa) que cobre / e /pagina/:num ────────
+// Importante: usamos UMA ÚNICA <Route>, não duas. Se fossem duas rotas
+// separadas ("/" e "/pagina/:num"), o React Router desmontaria e remontaria
+// todo o componente a cada troca de página — resetando o estado e disparando
+// uma nova busca ao Supabase toda vez (causa da paginação "sumindo" e da
+// inconsistência entre buscas). Com uma rota coringa, o componente permanece
+// montado e os dados são buscados uma única vez por sessão.
 function PageWrapper() {
-  const params = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const currentPage = Math.max(1, parseInt(params.num, 10) || 1);
+  const match = location.pathname.match(/^\/pagina\/(\d+)\/?$/);
+  const currentPage = match ? Math.max(1, parseInt(match[1], 10) || 1) : 1;
 
   const goToPage = (p) => {
     if (p < 1) return;
@@ -411,8 +418,7 @@ function PageWrapper() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<PageWrapper />} />
-      <Route path="/pagina/:num" element={<PageWrapper />} />
+      <Route path="/*" element={<PageWrapper />} />
     </Routes>
   );
 }
@@ -436,6 +442,7 @@ function AppContent({ currentPage, goToPage }) {
         .from("noticias")
         .select("id,titulo,resumo,fonte_nome,url_original,cidade,categoria,regiao,imagem_url,created_at")
         .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .limit(1000);
       if (!mounted) return;
       if (e) {
@@ -467,6 +474,18 @@ function AppContent({ currentPage, goToPage }) {
     () => curarFeedCompleto(pool, PAGE1_SIZE, 4),
     [pool]
   );
+
+  // Checagem de integridade: confirma se curarFeedCompleto alguma vez repete
+  // o mesmo id (o que indicaria duplicação real, não só mesma fonte).
+  const duplicatasInfo = useMemo(() => {
+    const vistos = new Set();
+    const duplicados = [];
+    feedCurado.forEach((n, i) => {
+      if (vistos.has(n.id)) duplicados.push({ pos: i, id: n.id, source: n.source });
+      vistos.add(n.id);
+    });
+    return { total: duplicados.length, amostra: duplicados.slice(0, 5) };
+  }, [feedCurado]);
 
   const totalPages = paginacaoAtiva
     ? feedCurado.length <= PAGE1_SIZE
@@ -610,6 +629,10 @@ Responda APENAS com JSON válido, sem markdown.`,
                   pool.length: {pool.length}<br/>
                   feedCurado.length: {feedCurado.length}<br/>
                   currentPage: {currentPage} | totalPages: {totalPages}<br/>
+                  <strong>ids duplicados no feedCurado inteiro: {duplicatasInfo.total}</strong><br/>
+                  {duplicatasInfo.amostra.length > 0 && (
+                    <>amostra: {duplicatasInfo.amostra.map(d => `pos ${d.pos} (${d.source})`).join(", ")}<br/></>
+                  )}
                   feedCurado[0..7].source: {feedCurado.slice(0,8).map(n=>n.source).join(", ")}<br/>
                   cards[0..7].source (o que está sendo exibido): {cards.slice(0,8).map(n=>n.source).join(", ")}
                 </div>
