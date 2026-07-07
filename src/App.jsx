@@ -60,7 +60,7 @@ function getPrioridadeAtual() {
 // Organiza o pool por categoria (prioridade rotativa) e dentro de cada
 // categoria garante diversidade de fontes (1 por fonte).
 // O leitor vê um fluxo contínuo — sem títulos nem rótulos de categoria.
-function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4) {
+function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxPorFontePorPagina = 4) {
   const prioridade = getPrioridadeAtual();
 
   // 1) Agrupar por categoria, mantendo a ordem cronológica dentro do grupo
@@ -86,10 +86,13 @@ function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4) {
     idx++;
   }
 
-  // 3) Seleção final, item por item, respeitando DUAS regras ao mesmo tempo:
+  // 3) Seleção final, item por item, respeitando TRÊS regras ao mesmo tempo:
   //    - cooldown por fonte (nunca a mesma fonte antes de MIN_GAP posições);
   //    - limite de oficiais por bloco de página (nunca mais que maxOficiais
-  //      oficiais dentro de um mesmo bloco de itemsPerPage).
+  //      oficiais dentro de um mesmo bloco de itemsPerPage);
+  //    - limite de aparições por fonte por bloco de página (nunca mais que
+  //      maxPorFontePorPagina da MESMA fonte dentro de um mesmo bloco — o
+  //      excedente é adiado pra um bloco/página seguinte).
   // Tudo numa única passada — nenhum item é movido depois de posicionado,
   // então uma regra nunca desfaz o trabalho da outra.
   const MIN_GAP = 3;
@@ -106,10 +109,11 @@ function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4) {
   let posicao = 0;
   const totalItens = intercalado.length;
 
-  const escolherFonte = ({ respeitarOficiais, respeitarCooldown }) => {
+  const escolherFonte = ({ respeitarOficiais, respeitarCooldown, respeitarMaxPorFonte }) => {
     const inicioBloco = Math.floor(posicao / itemsPerPage) * itemsPerPage;
+    const itensDoBloco = resultado.slice(inicioBloco, posicao);
     const oficiaisNoBloco = respeitarOficiais
-      ? resultado.slice(inicioBloco, posicao).filter(n => n.isOficial).length
+      ? itensDoBloco.filter(n => n.isOficial).length
       : -Infinity;
 
     let melhor = null, melhorQtd = -1;
@@ -118,18 +122,24 @@ function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4) {
       if (fila.length === 0) continue;
       if (respeitarCooldown && (liberaEm.get(fonte) ?? 0) > posicao) continue;
       if (respeitarOficiais && fila[0].isOficial && oficiaisNoBloco >= maxOficiais) continue;
+      if (respeitarMaxPorFonte) {
+        const jaNoBloco = itensDoBloco.filter(n => n.source === fonte).length;
+        if (jaNoBloco >= maxPorFontePorPagina) continue;
+      }
       if (fila.length > melhorQtd) { melhorQtd = fila.length; melhor = fonte; }
     }
     return melhor;
   };
 
   while (resultado.length < totalItens) {
-    // Tenta respeitando as duas regras; se não achar candidato, relaxa
-    // primeiro o limite de oficiais e, por último, o cooldown — nessa ordem,
-    // pra nunca travar e nunca descartar notícia.
-    let fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true });
-    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: true });
-    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: false });
+    // Tenta respeitando as três regras; se não achar candidato, relaxa em
+    // cascata (do mais específico pro mais essencial), pra nunca travar e
+    // nunca descartar notícia: primeiro o limite por fonte, depois o de
+    // oficiais e, por último, o cooldown.
+    let fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true, respeitarMaxPorFonte: true });
+    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true, respeitarMaxPorFonte: false });
+    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: true, respeitarMaxPorFonte: false });
+    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: false, respeitarMaxPorFonte: false });
 
     const item = porFonte.get(fonte).shift();
     resultado.push(item);
@@ -471,9 +481,23 @@ function AppContent({ currentPage, goToPage }) {
   // fonte e com limite de oficiais por bloco de página — cobrindo TODAS as
   // páginas, não só a primeira. Nenhuma notícia é descartada, só reordenada.
   const feedCurado = useMemo(
-    () => curarFeedCompleto(pool, PAGE1_SIZE, 4),
+    () => curarFeedCompleto(pool, PAGE1_SIZE, 4, 2),
     [pool]
   );
+
+  // Embaralha a ORDEM VISUAL da página 1 (só o display, não muda quais
+  // notícias entram no feedCurado nem afeta a paginação 2+). Recalcula só
+  // quando o feedCurado muda (ou seja, uma vez por sessão/carregamento) —
+  // fica estável enquanto o leitor navega entre páginas, mas volta a variar
+  // numa próxima visita, devolvendo o ar de "ao vivo" da home.
+  const pagina1Embaralhada = useMemo(() => {
+    const copia = feedCurado.slice(0, PAGE1_SIZE);
+    for (let i = copia.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copia[i], copia[j]] = [copia[j], copia[i]];
+    }
+    return copia;
+  }, [feedCurado]);
 
   const totalPages = paginacaoAtiva
     ? feedCurado.length <= PAGE1_SIZE
@@ -482,9 +506,9 @@ function AppContent({ currentPage, goToPage }) {
     : 1;
 
   const cards = !paginacaoAtiva
-    ? feedCurado.slice(0, PAGE1_SIZE) // região filtrada: comportamento atual, sem paginação
+    ? pagina1Embaralhada // região filtrada: comportamento atual, sem paginação
     : currentPage === 1
-      ? feedCurado.slice(0, PAGE1_SIZE)
+      ? pagina1Embaralhada
       : feedCurado.slice(
           PAGE1_SIZE + (currentPage - 2) * ITEMS_PER_PAGE,
           PAGE1_SIZE + (currentPage - 1) * ITEMS_PER_PAGE
