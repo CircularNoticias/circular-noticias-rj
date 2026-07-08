@@ -3,9 +3,18 @@
 // Roda conforme schedule configurado (cron-job.org + vercel.json).
 // Inclui: grupos de fontes com limites, limpeza HTML, extração de imagem,
 // classificação de categoria (inclui Mobilidade), detecção de cidade/região,
+// recuperação inteligente de imagens (RSS -> OG -> conteúdo -> fallback,
+// com fila de pendentes para a Fase 2 em recover-images.js),
 // e registro de saúde das fontes em `fontes_saude`.
 
 import { XMLParser } from "fast-xml-parser";
+import { recoverImage, getFallbackImage, resetStats, getStatsResumo } from "../../src/lib/imageRecovery.js";
+
+// ─── Proteção contra timeout (Vercel Hobby) ────────────────────────────────
+// Configurável por variável de ambiente. Se não definida, usa 30 como padrão.
+const MAX_RECUPERACOES_POR_EXECUCAO =
+  Number(process.env.MAX_RECUPERACOES_POR_EXECUCAO) || 30;
+let recuperacoesUsadas = 0;
 
 // ─── Grupos de fontes e limites ────────────────────────────────────────────
 const GRUPOS = {
@@ -35,7 +44,6 @@ const GRUPOS = {
       "Futuro da Saúde", "Tempo.com", "Sebrae RJ",
       "Net Vasco", "Fogão Net", "Coluna do Fla", "Net Flu",
       "Carnavalesco",
-      // ─── Novas fontes regionais (RJ) ───
       "Serra News RJ", "Jornal do Estado do Rio", "Net Diário",
       "RJ Interior", "Folha do Interior", "A Cidade Costa Verde",
       "Diário Carioca", "Agenda do Poder", "Rádio Tupi", "América Rio",
@@ -50,7 +58,6 @@ const GRUPOS = {
       "Prefeitura de Casimiro de Abreu", "Prefeitura de Macaé",
       "Prefeitura de Japeri", "Prefeitura de Mangaratiba",
       "Prefeitura de Maricá", "Prefeitura de Cabo Frio (Oficial)",
-      // ─── Novas prefeituras ───
       "Prefeitura de Nilópolis", "Prefeitura de Paracambi",
       "Prefeitura de Porciúncula", "Prefeitura de Quatis",
       "Prefeitura de Queimados", "Prefeitura de Quissamã",
@@ -59,10 +66,6 @@ const GRUPOS = {
   },
   D: {
     nome: "Fontes Genéricas (nacionais)",
-    // Limite mais baixo: essas fontes não são o carro-chefe do produto,
-    // entram só como tempero ocasional (ver App.jsx pra como isso afeta
-    // a curadoria de exibição — este limite aqui só reduz o volume que
-    // é sequer buscado do feed).
     limite: 3,
     fontes: new Set([
       "Tua Saúde", "Guia do Estudante (Abril)", "Fuxico TV", "Caras",
@@ -121,7 +124,7 @@ function limparHtml(raw) {
   return t.replace(/&([a-zA-Z]+);/g, (m, n) => E[n] ?? m).replace(/\s+/g, " ").trim();
 }
 
-// ─── Extração de imagem ────────────────────────────────────────────────────
+// ─── Extração de imagem (Etapa 1 do módulo de recuperação) ─────────────────
 function extrairImagem(item) {
   const enc = item.enclosure;
   if (enc) {
@@ -291,12 +294,12 @@ function parseRssItems(xml) {
   return Array.isArray(items) ? items : [items];
 }
 
-// ─── Inserção de notícias ──────────────────────────────────────────────────
+// ─── Inserção de notícias (com recuperação de imagem + fila de pendentes) ──
 async function upsertNoticias(items, fonte, limite) {
   const fatia = items.slice(0, limite);
   if (!fatia.length) return 0;
 
-  const rows = fatia.map(item => {
+  const rowsBase = fatia.map(item => {
     const titulo = limparHtml(item.title);
     const resumo = limparHtml(item.description);
     const loc    = detectarCidadeRegiao(titulo, resumo);
@@ -309,10 +312,38 @@ async function upsertNoticias(items, fonte, limite) {
       cidade:          loc ? loc.cidade : null,
       categoria:       classificarCategoria(titulo, resumo),
       imagem_url:      extrairImagem(item),
+      imagem_origem:   null,
+      imagem_pendente: false,
+      tentativas_recuperacao: 0,
       data_publicacao: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
       processado_ia:   false,
     };
   });
+
+  const rows = await Promise.all(rowsBase.map(async row => {
+    // Etapa 1 (RSS) já resolvida na extração acima.
+    if (row.imagem_url) {
+      row.imagem_origem = "rss";
+      row.imagem_pendente = false;
+      return row;
+    }
+
+    // Cota estourada nesta execução: usa fallback e agenda para a Fase 2.
+    if (recuperacoesUsadas >= MAX_RECUPERACOES_POR_EXECUCAO) {
+      row.imagem_url = getFallbackImage(row.categoria);
+      row.imagem_origem = "fallback";
+      row.imagem_pendente = true;
+      return row;
+    }
+
+    recuperacoesUsadas++;
+    const resultado = await recoverImage(row);
+    row.imagem_url = resultado.imagem_url;
+    row.imagem_origem = resultado.imagem_origem;
+    // Se não conseguiu nada além do fallback, deixa marcado para retry na Fase 2.
+    row.imagem_pendente = resultado.imagem_origem === "fallback";
+    return row;
+  }));
 
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/${NOTICIAS_TABLE}?on_conflict=url_original`,
@@ -357,6 +388,9 @@ export default async function handler(req, res) {
   if (CRON_SECRET && !tokenHeader && !tokenQuery) {
     return res.status(401).json({ error: "Não autorizado" });
   }
+
+  resetStats();
+  recuperacoesUsadas = 0;
 
   try {
     const fontes = await fetchFontesAtivas();
@@ -416,17 +450,17 @@ export default async function handler(req, res) {
       });
     }
 
-    // Registrar saúde em lote
     await registrarSaude(registrosSaude);
 
     return res.status(200).json({
       ok: true,
       totalFontes: fontes.length,
       totalInseridas,
+      recuperacaoImagens: getStatsResumo(),
       resultados,
     });
   } catch (err) {
     console.error("Cron error:", err);
     return res.status(500).json({ error: err.message });
   }
-}
+      }
