@@ -5,16 +5,19 @@
 // classificação de categoria (inclui Mobilidade), detecção de cidade/região,
 // recuperação inteligente de imagens (RSS -> OG -> conteúdo -> fallback,
 // com fila de pendentes para a Fase 2 em recover-images.js),
-// e registro de saúde das fontes em `fontes_saude`.
+// registro de saúde das fontes em `fontes_saude`, e alerta automático de
+// fontes com 3+ falhas consecutivas (tabela `alertas_fontes`).
 
 import { XMLParser } from "fast-xml-parser";
 import { recoverImage, getFallbackImage, resetStats, getStatsResumo } from "../../src/lib/imageRecovery.js";
 
 // ─── Proteção contra timeout (Vercel Hobby) ────────────────────────────────
-// Configurável por variável de ambiente. Se não definida, usa 30 como padrão.
 const MAX_RECUPERACOES_POR_EXECUCAO =
   Number(process.env.MAX_RECUPERACOES_POR_EXECUCAO) || 30;
 let recuperacoesUsadas = 0;
+
+// ─── Alerta de fontes com falhas consecutivas ──────────────────────────────
+const LIMITE_FALHAS_PARA_ALERTA = 3;
 
 // ─── Grupos de fontes e limites ────────────────────────────────────────────
 const GRUPOS = {
@@ -93,6 +96,7 @@ function getGrupo(nome) {
 const NOTICIAS_TABLE  = "noticias";
 const FONTES_TABLE    = "fontes";
 const SAUDE_TABLE     = "fontes_saude";
+const ALERTAS_TABLE   = "alertas_fontes";
 const SUPABASE_URL    = process.env.SUPABASE_URL;
 const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const FEED_API_KEY    = process.env.FEED_API_KEY;
@@ -264,7 +268,7 @@ function getEstrategia(fonte) {
 
 async function fetchFontesAtivas() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?select=id,nome,url,rss_url,regiao,ativo&ativo=eq.true`,
+    `${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?select=id,nome,url,rss_url,regiao,ativo,falhas_consecutivas_atual&ativo=eq.true`,
     { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
   );
   if (!res.ok) throw new Error(`Fontes: ${res.status}`);
@@ -321,14 +325,12 @@ async function upsertNoticias(items, fonte, limite) {
   });
 
   const rows = await Promise.all(rowsBase.map(async row => {
-    // Etapa 1 (RSS) já resolvida na extração acima.
     if (row.imagem_url) {
       row.imagem_origem = "rss";
       row.imagem_pendente = false;
       return row;
     }
 
-    // Cota estourada nesta execução: usa fallback e agenda para a Fase 2.
     if (recuperacoesUsadas >= MAX_RECUPERACOES_POR_EXECUCAO) {
       row.imagem_url = getFallbackImage(row.categoria);
       row.imagem_origem = "fallback";
@@ -340,7 +342,6 @@ async function upsertNoticias(items, fonte, limite) {
     const resultado = await recoverImage(row);
     row.imagem_url = resultado.imagem_url;
     row.imagem_origem = resultado.imagem_origem;
-    // Se não conseguiu nada além do fallback, deixa marcado para retry na Fase 2.
     row.imagem_pendente = resultado.imagem_origem === "fallback";
     return row;
   }));
@@ -381,6 +382,81 @@ async function registrarSaude(registros) {
   if (!res.ok) console.error(`Saúde insert: ${res.status}`);
 }
 
+// ─── Alertas de fontes com falhas consecutivas ─────────────────────────────
+async function patchFonte(id, patch) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?id=eq.${id}`, {
+    method: "PATCH",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) console.error(`Patch fonte ${id}: ${res.status}`);
+}
+
+async function criarAlerta(fonte, falhas) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${ALERTAS_TABLE}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify([{
+      fonte_id: fonte.id,
+      fonte_nome: fonte.nome,
+      falhas_consecutivas: falhas,
+    }]),
+  });
+  if (!res.ok) console.error(`Criar alerta ${fonte.nome}: ${res.status}`);
+}
+
+async function resolverAlerta(fonteId) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/${ALERTAS_TABLE}?fonte_id=eq.${fonteId}&resolvido=eq.false`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ resolvido: true, resolvido_em: new Date().toISOString() }),
+    }
+  );
+  if (!res.ok) console.error(`Resolver alerta fonte ${fonteId}: ${res.status}`);
+}
+
+// Atualiza o contador persistente de falhas consecutivas de uma fonte e
+// dispara/resolve alertas conforme necessário. "sucesso" = a fonte
+// respondeu e retornou XML válido nesta execução.
+async function atualizarStatusFalha(fonte, sucesso) {
+  const atual = fonte.falhas_consecutivas_atual || 0;
+
+  if (sucesso) {
+    if (atual > 0) {
+      await patchFonte(fonte.id, { falhas_consecutivas_atual: 0 });
+      if (atual >= LIMITE_FALHAS_PARA_ALERTA) {
+        await resolverAlerta(fonte.id);
+      }
+    }
+    return;
+  }
+
+  const novo = atual + 1;
+  await patchFonte(fonte.id, { falhas_consecutivas_atual: novo });
+  // Só cria o alerta na primeira vez que cruza o limite — evita registrar
+  // um alerta novo a cada execução enquanto a fonte permanece fora do ar.
+  if (novo === LIMITE_FALHAS_PARA_ALERTA) {
+    await criarAlerta(fonte, novo);
+  }
+}
+
 // ─── Handler ───────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   const tokenHeader = req.headers.authorization === `Bearer ${CRON_SECRET}`;
@@ -402,6 +478,8 @@ export default async function handler(req, res) {
       const estrategia = getEstrategia(fonte);
 
       if (estrategia === "sem_suporte") {
+        // Fontes sem suporte não entram no contador de falhas consecutivas —
+        // é um estado permanente de configuração, não uma falha de execução.
         resultados.push({ fonte: fonte.nome, status: "sem_suporte" });
         registrosSaude.push({
           fonte_id: fonte.id, fonte_nome: fonte.nome,
@@ -421,6 +499,7 @@ export default async function handler(req, res) {
       } catch { /* xml permanece null */ }
 
       if (!xml) {
+        await atualizarStatusFalha(fonte, false);
         resultados.push({ fonte: fonte.nome, status: "erro_fetch", estrategia });
         registrosSaude.push({
           fonte_id: fonte.id, fonte_nome: fonte.nome,
@@ -429,6 +508,8 @@ export default async function handler(req, res) {
         });
         continue;
       }
+
+      await atualizarStatusFalha(fonte, true);
 
       const items    = parseRssItems(xml);
       const limite   = getLimite(fonte.nome);
@@ -463,4 +544,4 @@ export default async function handler(req, res) {
     console.error("Cron error:", err);
     return res.status(500).json({ error: err.message });
   }
-      }
+}
