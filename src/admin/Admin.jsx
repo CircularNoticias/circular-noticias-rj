@@ -70,16 +70,19 @@ export function AdminDashboard() {
 
   const carregar = async () => {
     setLoading(true);
-    const [{ data: saudeData }, { data: alertasData }] = await Promise.all([
+    const [{ data: fontesAtivas }, { data: saudeData }, { data: alertasData }] = await Promise.all([
+      supabase.from("fontes").select("id").eq("ativo", true),
       supabase.from("fontes_saude").select("fonte_id,fonte_nome,status,itens_inseridos,tempo_resposta_ms,id").order("id", { ascending: false }).limit(500),
       supabase.from("alertas_fontes").select("*").eq("resolvido", false).order("criado_em", { ascending: false }),
     ]);
+    const idsAtivos = new Set((fontesAtivas || []).map(f => f.id));
     // Mantém só o registro mais recente de cada fonte (a query já vem
     // ordenada da mais nova pra mais antiga).
     const vistos = new Set();
     const ultimas = [];
     for (const row of saudeData || []) {
       if (vistos.has(row.fonte_id)) continue;
+      if (!idsAtivos.has(row.fonte_id)) continue;
       vistos.add(row.fonte_id);
       ultimas.push(row);
     }
