@@ -87,7 +87,7 @@ export function AdminDashboard() {
       ultimas.push(row);
     }
     setSaude(ultimas);
-    setAlertas(alertasData || []);
+    setAlertas((alertasData || []).filter(a => idsAtivos.has(a.fonte_id)));
     setLoading(false);
   };
 
