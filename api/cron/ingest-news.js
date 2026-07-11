@@ -277,7 +277,7 @@ async function fetchFontesAtivas() {
 
 async function fetchRssNativo(url) {
   const inicio = Date.now();
-  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
   const ms = Date.now() - inicio;
   if (!res.ok) return { xml: null, ms };
   return { xml: await res.text(), ms };
