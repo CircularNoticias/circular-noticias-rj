@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
-
+import { AdminLogin, AdminDashboard, RequireAuth } from "./admin/Admin.jsx";
 // ─── Paginação ──────────────────────────────────────────────────────────────
 const ITEMS_PER_PAGE = 24; // notícias por página a partir da página 2
 
@@ -454,6 +454,8 @@ function PageWrapper() {
 export default function App() {
   return (
     <Routes>
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
       <Route path="/*" element={<PageWrapper />} />
     </Routes>
   );
