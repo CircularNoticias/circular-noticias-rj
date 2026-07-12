@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 
 // ─── Sessão ──────────────────────────────────────────────────────────────
 function useAdminSession() {
-  const [session, setSession] = useState(undefined); // undefined = carregando
+  const [session, setSession] = useState(undefined);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
@@ -62,6 +62,12 @@ export function AdminLogin() {
 // ─── Dashboard ───────────────────────────────────────────────────────────
 const STATUS_COLORS = { ok: "#22c55e", erro_fetch: "#ef4444", sem_suporte: "#94a3b8" };
 
+const TIPO_ALERTA = {
+  falha_fetch:  { icon: "🔴", label: "Falha ao buscar feed" },
+  zero_itens:   { icon: "🧊", label: "Feed congelado (0 itens novos)" },
+  queda_volume: { icon: "📉", label: "Queda de volume" },
+};
+
 export function AdminDashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -76,8 +82,7 @@ export function AdminDashboard() {
       supabase.from("alertas_fontes").select("*").eq("resolvido", false).order("criado_em", { ascending: false }),
     ]);
     const idsAtivos = new Set((fontesAtivas || []).map(f => f.id));
-    // Mantém só o registro mais recente de cada fonte (a query já vem
-    // ordenada da mais nova pra mais antiga).
+
     const vistos = new Set();
     const ultimas = [];
     for (const row of saudeData || []) {
@@ -121,19 +126,24 @@ export function AdminDashboard() {
                 <div style={{ fontSize: 28, fontWeight: 800, color: "#ef4444" }}>{totalErro}</div>
               </div>
               <div style={{ background: "#fff", borderRadius: 12, padding: 16, flex: 1, minWidth: 140 }}>
-                <div style={{ fontSize: 12, color: "#94a3b8" }}>Alertas ativos (3+ falhas)</div>
+                <div style={{ fontSize: 12, color: "#94a3b8" }}>Alertas ativos (3+ ocorrências)</div>
                 <div style={{ fontSize: 28, fontWeight: 800, color: "#f97316" }}>{alertas.length}</div>
               </div>
             </div>
 
             {alertas.length > 0 && (
               <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-                <h3 style={{ margin: "0 0 10px", fontSize: 14, color: "#9a3412" }}>🚨 Fontes com falhas consecutivas</h3>
-                {alertas.map(a => (
-                  <div key={a.id} style={{ fontSize: 13, color: "#7c2d12", padding: "4px 0" }}>
-                    {a.fonte_nome} — {a.falhas_consecutivas} falhas desde {new Date(a.criado_em).toLocaleString("pt-BR")}
-                  </div>
-                ))}
+                <h3 style={{ margin: "0 0 10px", fontSize: 14, color: "#9a3412" }}>🚨 Alertas ativos</h3>
+                {alertas.map(a => {
+                  const tipo = TIPO_ALERTA[a.tipo] || TIPO_ALERTA.falha_fetch;
+                  return (
+                    <div key={a.id} style={{ fontSize: 13, color: "#7c2d12", padding: "6px 0", borderTop: "1px solid #fed7aa" }}>
+                      <div>{tipo.icon} <strong>{a.fonte_nome}</strong> — {tipo.label}</div>
+                      {a.detalhe && <div style={{ fontSize: 12, color: "#9a3412", marginTop: 2 }}>{a.detalhe}</div>}
+                      <div style={{ fontSize: 11, color: "#b45309", marginTop: 2 }}>desde {new Date(a.criado_em).toLocaleString("pt-BR")}</div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
