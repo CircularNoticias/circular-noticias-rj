@@ -5,8 +5,11 @@
 // classificação de categoria (inclui Mobilidade), detecção de cidade/região,
 // recuperação inteligente de imagens (RSS -> OG -> conteúdo -> fallback,
 // com fila de pendentes para a Fase 2 em recover-images.js),
-// registro de saúde das fontes em `fontes_saude`, e alerta automático de
-// fontes com 3+ falhas consecutivas (tabela `alertas_fontes`).
+// registro de saúde das fontes em `fontes_saude`, e alertas automáticos:
+//   - falha_fetch:   3+ falhas consecutivas ao buscar o feed
+//   - zero_itens:    feed responde, mas 0 itens novos são inseridos
+//                     (feed "congelado", caso descoberto com O Dia)
+//   - queda_volume:  volume inserido muito abaixo da média histórica da fonte
 
 import { XMLParser } from "fast-xml-parser";
 import { recoverImage, getFallbackImage, resetStats, getStatsResumo } from "../../src/lib/imageRecovery.js";
@@ -16,17 +19,23 @@ const MAX_RECUPERACOES_POR_EXECUCAO =
   Number(process.env.MAX_RECUPERACOES_POR_EXECUCAO) || 30;
 let recuperacoesUsadas = 0;
 
-// ─── Alerta de fontes com falhas consecutivas ──────────────────────────────
+// ─── Alertas ────────────────────────────────────────────────────────────────
 const LIMITE_FALHAS_PARA_ALERTA = 3;
 
 // ─── Grupos de fontes e limites ────────────────────────────────────────────
 const GRUPOS = {
   A: {
-    nome: "Grandes Portais",
+    nome: "Grandes Portais (volume alto)",
+    limite: 15,
+    fontes: new Set([
+      "O Globo", "Extra", "O Dia",
+    ]),
+  },
+  A2: {
+    nome: "Grandes Portais (demais)",
     limite: 10,
     fontes: new Set([
-      "O Globo", "Extra", "O Dia", "G1 Rio de Janeiro",
-      "G1 Região dos Lagos", "G1 Norte Fluminense",
+      "G1 Rio de Janeiro", "G1 Região dos Lagos", "G1 Norte Fluminense",
       "G1 Região Serrana", "G1 Sul do Rio e Costa Verde",
       "R7 Rio de Janeiro", "Diário do Rio",
       "TechTudo", "Canaltech", "TecMundo", "CinePOP",
@@ -54,7 +63,7 @@ const GRUPOS = {
   },
   C: {
     nome: "Fontes Oficiais",
-    limite: 5,
+    limite: 7,
     fontes: new Set([
       "Prefeitura do Rio", "Prefeitura de Niterói",
       "Prefeitura de Cabo Frio", "Prefeitura de Volta Redonda",
@@ -64,12 +73,19 @@ const GRUPOS = {
       "Prefeitura de Nilópolis", "Prefeitura de Paracambi",
       "Prefeitura de Porciúncula", "Prefeitura de Quatis",
       "Prefeitura de Queimados", "Prefeitura de Quissamã",
-      "Prefeitura de Rio Bonito", "Centro de Operações Rio",
+      "Prefeitura de Rio Bonito",
+    ]),
+  },
+  C2: {
+    nome: "Fontes Oficiais (volume fixo)",
+    limite: 5,
+    fontes: new Set([
+      "Centro de Operações Rio",
     ]),
   },
   D: {
     nome: "Fontes Genéricas (nacionais)",
-    limite: 3,
+    limite: 5,
     fontes: new Set([
       "Tua Saúde", "Guia do Estudante (Abril)", "Fuxico TV", "Caras",
       "Revista PEGN (Globo)", "Saúde Abril", "Casa da Ciência", "InfoMoney",
@@ -268,11 +284,21 @@ function getEstrategia(fonte) {
 
 async function fetchFontesAtivas() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?select=id,nome,url,rss_url,regiao,ativo,falhas_consecutivas_atual&ativo=eq.true`,
+    `${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?select=id,nome,url,rss_url,regiao,ativo,falhas_consecutivas_atual,zero_itens_consecutivo,queda_volume_consecutivo&ativo=eq.true`,
     { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
   );
   if (!res.ok) throw new Error(`Fontes: ${res.status}`);
   return res.json();
+}
+
+async function fetchMediaItens() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/fontes_media_itens?select=fonte_id,media_itens`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+  );
+  if (!res.ok) { console.error(`Media itens: ${res.status}`); return new Map(); }
+  const data = await res.json();
+  return new Map(data.map(r => [r.fonte_id, Number(r.media_itens)]));
 }
 
 async function fetchRssNativo(url) {
@@ -382,7 +408,7 @@ async function registrarSaude(registros) {
   if (!res.ok) console.error(`Saúde insert: ${res.status}`);
 }
 
-// ─── Alertas de fontes com falhas consecutivas ─────────────────────────────
+// ─── Alertas de fontes ──────────────────────────────────────────────────────
 async function patchFonte(id, patch) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${FONTES_TABLE}?id=eq.${id}`, {
     method: "PATCH",
@@ -397,7 +423,7 @@ async function patchFonte(id, patch) {
   if (!res.ok) console.error(`Patch fonte ${id}: ${res.status}`);
 }
 
-async function criarAlerta(fonte, falhas) {
+async function criarAlerta(fonte, contagem, tipo, detalhe) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${ALERTAS_TABLE}`, {
     method: "POST",
     headers: {
@@ -409,15 +435,17 @@ async function criarAlerta(fonte, falhas) {
     body: JSON.stringify([{
       fonte_id: fonte.id,
       fonte_nome: fonte.nome,
-      falhas_consecutivas: falhas,
+      falhas_consecutivas: contagem,
+      tipo,
+      detalhe,
     }]),
   });
-  if (!res.ok) console.error(`Criar alerta ${fonte.nome}: ${res.status}`);
+  if (!res.ok) console.error(`Criar alerta ${fonte.nome} (${tipo}): ${res.status}`);
 }
 
-async function resolverAlerta(fonteId) {
+async function resolverAlerta(fonteId, tipo) {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/${ALERTAS_TABLE}?fonte_id=eq.${fonteId}&resolvido=eq.false`,
+    `${SUPABASE_URL}/rest/v1/${ALERTAS_TABLE}?fonte_id=eq.${fonteId}&resolvido=eq.false&tipo=eq.${tipo}`,
     {
       method: "PATCH",
       headers: {
@@ -429,31 +457,61 @@ async function resolverAlerta(fonteId) {
       body: JSON.stringify({ resolvido: true, resolvido_em: new Date().toISOString() }),
     }
   );
-  if (!res.ok) console.error(`Resolver alerta fonte ${fonteId}: ${res.status}`);
+  if (!res.ok) console.error(`Resolver alerta fonte ${fonteId} (${tipo}): ${res.status}`);
 }
 
-// Atualiza o contador persistente de falhas consecutivas de uma fonte e
-// dispara/resolve alertas conforme necessário. "sucesso" = a fonte
-// respondeu e retornou XML válido nesta execução.
+// Falhas de fetch (erro_fetch consecutivo).
 async function atualizarStatusFalha(fonte, sucesso) {
   const atual = fonte.falhas_consecutivas_atual || 0;
 
   if (sucesso) {
     if (atual > 0) {
       await patchFonte(fonte.id, { falhas_consecutivas_atual: 0 });
-      if (atual >= LIMITE_FALHAS_PARA_ALERTA) {
-        await resolverAlerta(fonte.id);
-      }
+      if (atual >= LIMITE_FALHAS_PARA_ALERTA) await resolverAlerta(fonte.id, "falha_fetch");
     }
     return;
   }
 
   const novo = atual + 1;
   await patchFonte(fonte.id, { falhas_consecutivas_atual: novo });
-  // Só cria o alerta na primeira vez que cruza o limite — evita registrar
-  // um alerta novo a cada execução enquanto a fonte permanece fora do ar.
   if (novo === LIMITE_FALHAS_PARA_ALERTA) {
-    await criarAlerta(fonte, novo);
+    await criarAlerta(fonte, novo, "falha_fetch", `${novo} falhas consecutivas ao buscar o feed.`);
+  }
+}
+
+// Feed "congelado" (responde, mas 0 itens novos) e queda de volume vs.
+// média histórica da própria fonte.
+async function atualizarStatusVolume(fonte, itemsCount, inseridas, media) {
+  const zeroAtual = fonte.zero_itens_consecutivo || 0;
+  const quedaAtual = fonte.queda_volume_consecutivo || 0;
+
+  const ehZeroItens = itemsCount > 0 && inseridas === 0;
+  if (ehZeroItens) {
+    const novo = zeroAtual + 1;
+    await patchFonte(fonte.id, { zero_itens_consecutivo: novo });
+    if (novo === LIMITE_FALHAS_PARA_ALERTA) {
+      await criarAlerta(fonte, novo, "zero_itens",
+        `Feed respondeu com ${itemsCount} itens, mas 0 foram inseridos como novos em ${novo} execuções seguidas (possível conteúdo congelado).`);
+    }
+  } else if (zeroAtual > 0) {
+    await patchFonte(fonte.id, { zero_itens_consecutivo: 0 });
+    if (zeroAtual >= LIMITE_FALHAS_PARA_ALERTA) await resolverAlerta(fonte.id, "zero_itens");
+  }
+
+  // Só avalia queda de volume quando não é já um caso de zero_itens (evita
+  // dois alertas simultâneos pro mesmo sintoma) e quando existe média
+  // histórica minimamente relevante.
+  const ehQuedaVolume = !ehZeroItens && media !== null && media >= 3 && inseridas < media * 0.5;
+  if (ehQuedaVolume) {
+    const novo = quedaAtual + 1;
+    await patchFonte(fonte.id, { queda_volume_consecutivo: novo });
+    if (novo === LIMITE_FALHAS_PARA_ALERTA) {
+      await criarAlerta(fonte, novo, "queda_volume",
+        `Inseriu ${inseridas} itens; média histórica da fonte é ${media.toFixed(1)}.`);
+    }
+  } else if (quedaAtual > 0) {
+    await patchFonte(fonte.id, { queda_volume_consecutivo: 0 });
+    if (quedaAtual >= LIMITE_FALHAS_PARA_ALERTA) await resolverAlerta(fonte.id, "queda_volume");
   }
 }
 
@@ -469,7 +527,11 @@ export default async function handler(req, res) {
   recuperacoesUsadas = 0;
 
   try {
-    const fontes = await fetchFontesAtivas();
+    const [fontes, mediaMap] = await Promise.all([
+      fetchFontesAtivas(),
+      fetchMediaItens(),
+    ]);
+
     let totalInseridas = 0;
     const resultados  = [];
     const registrosSaude = [];
@@ -478,8 +540,6 @@ export default async function handler(req, res) {
       const estrategia = getEstrategia(fonte);
 
       if (estrategia === "sem_suporte") {
-        // Fontes sem suporte não entram no contador de falhas consecutivas —
-        // é um estado permanente de configuração, não uma falha de execução.
         resultados.push({ fonte: fonte.nome, status: "sem_suporte" });
         registrosSaude.push({
           fonte_id: fonte.id, fonte_nome: fonte.nome,
@@ -515,6 +575,9 @@ export default async function handler(req, res) {
       const limite   = getLimite(fonte.nome);
       const inseridas = await upsertNoticias(items, fonte, limite);
       totalInseridas += inseridas;
+
+      const media = mediaMap.get(fonte.id) ?? null;
+      await atualizarStatusVolume(fonte, items.length, inseridas, media);
 
       resultados.push({
         fonte: fonte.nome, estrategia,
