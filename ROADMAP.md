@@ -101,3 +101,45 @@ Isso representa uma virada de fase do projeto: de **"construir funcionalidades"*
 - **Cron**: cron-job.org externo (Vercel Hobby só permite 1x/dia nativo)
 - **Scraping de fallback**: serviço Manus para fontes sem RSS compatível (allowlist de domínios em `ALLOWLIST`)
 - **Sem serviço de e-mail externo**: alertas ficam só no banco + painel visual, por decisão consciente (volume de fontes não justificava a complexidade de um serviço de e-mail transacional no momento)
+
+
+  ---
+
+## Princípio de Arquitetura — Instrumentação orientada à descoberta
+
+O objetivo do Centro de Inteligência não é apenas apresentar métricas ou produzir dashboards visualmente agradáveis.
+
+Cada indicador deve aumentar a capacidade de descobrir comportamentos inesperados do sistema, inclusive problemas cuja existência ainda não era conhecida.
+
+O valor de uma métrica deve ser avaliado pela pergunta:
+
+> "Se algo começar a sair do normal, este indicador tornará isso evidente?"
+
+Isso transforma o Centro de Inteligência em uma ferramenta de engenharia operacional, e não apenas em um painel executivo.
+
+Na prática, um bom indicador deve:
+
+- tornar inconsistências perceptíveis;
+- facilitar investigações;
+- permitir confirmar ou refutar hipóteses;
+- reduzir o tempo entre o surgimento de um problema e sua descoberta;
+- gerar confiança nos dados utilizados para decisões futuras.
+
+**Casos reais já observados no projeto que comprovam esse princípio:**
+
+- a investigação manual da fonte O Dia revelou um feed congelado há semanas, o que motivou a criação do alerta automático `zero_itens` para detectar esse padrão preventivamente no futuro;
+- a métrica de recuperação de imagens revelou a existência de dados históricos sem `imagem_origem`, evitando um falso diagnóstico de falha;
+- a distribuição por regiões evidenciou duplicidade na classificação geográfica, permitindo consolidar corretamente as nove regiões oficiais do estado;
+- a análise das fontes revelou registros duplicados na tabela `fontes`, classificados como dívida técnica de baixa prioridade.
+
+Esses exemplos demonstram que o maior valor do Centro de Inteligência não está em responder perguntas previamente conhecidas, mas em revelar perguntas que ainda não haviam sido feitas.
+
+### Os três níveis de maturidade
+
+- **Monitoramento**: "Está funcionando?"
+- **Observabilidade**: "Por que deixou de funcionar?"
+- **Inteligência**: "O que está mudando antes que se torne um problema?"
+
+O Circular Notícias RJ já ultrapassou o nível de monitoramento e está entrando no de observabilidade. Quando o Centro de Inteligência passar a produzir interpretações e tendências automaticamente (ex.: "a cobertura da Região Serrana caiu X% em 7 dias"), o projeto avançará para o nível de inteligência.
+
+**Aplicação prática**: ao avaliar um novo indicador para o painel, a pergunta certa não é "que gráfico podemos mostrar?", e sim "que tipo de problema esse indicador vai nos permitir descobrir?".
