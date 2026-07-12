@@ -135,17 +135,31 @@ export function AdminDashboard() {
               <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, padding: 16, marginBottom: 20 }}>
                 <h3 style={{ margin: "0 0 10px", fontSize: 14, color: "#9a3412" }}>🚨 Alertas ativos</h3>
                 {alertas.map(a => {
-                  const tipo = TIPO_ALERTA[a.tipo] || TIPO_ALERTA.falha_fetch;
-                  return (
-                    <div key={a.id} style={{ fontSize: 13, color: "#7c2d12", padding: "6px 0", borderTop: "1px solid #fed7aa" }}>
-                      <div>{tipo.icon} <strong>{a.fonte_nome}</strong> — {tipo.label}</div>
-                      {a.detalhe && <div style={{ fontSize: 12, color: "#9a3412", marginTop: 2 }}>{a.detalhe}</div>}
-                      <div style={{ fontSize: 11, color: "#b45309", marginTop: 2 }}>desde {new Date(a.criado_em).toLocaleString("pt-BR")}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+  const tipo = TIPO_ALERTA[a.tipo] || TIPO_ALERTA.falha_fetch;
+  const diasAtivo = Math.floor((Date.now() - new Date(a.criado_em).getTime()) / (1000 * 60 * 60 * 24));
+  const cronica = diasAtivo >= 7;
+  return (
+    <div key={a.id} style={{
+      fontSize: 13, padding: "8px 10px", marginTop: 4,
+      borderRadius: 8,
+      background: cronica ? "#fee2e2" : "transparent",
+      border: cronica ? "1px solid #fca5a5" : "none",
+      borderTop: cronica ? "1px solid #fca5a5" : "1px solid #fed7aa",
+      color: "#7c2d12",
+    }}>
+      <div>
+        {tipo.icon} <strong>{a.fonte_nome}</strong> — {tipo.label}
+        {cronica && (
+          <span style={{ marginLeft: 8, background: "#dc2626", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4 }}>
+            CRÔNICA · {diasAtivo}d — avaliar desativação
+          </span>
+        )}
+      </div>
+      {a.detalhe && <div style={{ fontSize: 12, color: "#9a3412", marginTop: 2 }}>{a.detalhe}</div>}
+      <div style={{ fontSize: 11, color: "#b45309", marginTop: 2 }}>desde {new Date(a.criado_em).toLocaleString("pt-BR")} ({diasAtivo} dia{diasAtivo !== 1 ? "s" : ""})</div>
+    </div>
+  );
+})}
 
             <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
