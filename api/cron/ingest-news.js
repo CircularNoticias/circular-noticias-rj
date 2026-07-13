@@ -45,6 +45,10 @@ const GRUPOS = {
     nome: "Portais Regionais",
     limite: 10,
     fontes: new Set([
+      "Veja Rio", "Jornal Rio", "Rio em Foco", "Rio Notícias",
+      "Voz das Comunidades", "Cidade de Niterói", "O Fluminense",
+      "A Voz da Serra", "Prensa de Babel", "RJ Costa Verde",
+      "Folha de Italva", "Povo na Rua",
       "RC24H", "Portal Ururau", "Lagos Informa", "Diário do Vale",
       "O São Gonçalo", "Expresso Carioca", "Jornal Hora H",
       "Notícias de Nova Iguaçu", "Notícias da Baixada",
@@ -65,6 +69,9 @@ const GRUPOS = {
     nome: "Fontes Oficiais",
     limite: 7,
     fontes: new Set([
+      "Prefeitura de São Francisco de Itabapoana", "Prefeitura de São João de Meriti",
+      "Prefeitura de São Pedro da Aldeia", "Prefeitura de Saquarema",
+      "Prefeitura de Sumidouro",
       "Prefeitura do Rio", "Prefeitura de Niterói",
       "Prefeitura de Cabo Frio", "Prefeitura de Volta Redonda",
       "Prefeitura de Casimiro de Abreu", "Prefeitura de Macaé",
@@ -87,6 +94,7 @@ const GRUPOS = {
     nome: "Fontes Genéricas (nacionais)",
     limite: 5,
     fontes: new Set([
+      "Monitor Mercantil", "Fecomércio-RJ", "Revista Oeste (RJ)", "Monitor Econômico",
       "Tua Saúde", "Guia do Estudante (Abril)", "Fuxico TV", "Caras",
       "Revista PEGN (Globo)", "Saúde Abril", "Casa da Ciência", "InfoMoney",
     ]),
