@@ -255,7 +255,8 @@ const CIDADES = [
 function detectarCidadeRegiao(titulo, resumo) {
   const t = semAcentos(`${titulo} ${resumo}`.toLowerCase());
   for (const [match, nome, regiao] of CIDADES) {
-    if (t.includes(match)) return { cidade: nome, regiao };
+    const regex = new RegExp(`\\b${match.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+    if (regex.test(t)) return { cidade: nome, regiao };
   }
   return null;
 }
