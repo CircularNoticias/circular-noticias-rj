@@ -21,6 +21,14 @@ let recuperacoesUsadas = 0;
 
 // ─── Alertas ────────────────────────────────────────────────────────────────
 const LIMITE_FALHAS_PARA_ALERTA = 3;
+const REGIOES_ESPERADAS = [
+  "metropolitana", "baixada", "lagos", "serrana", "norte",
+  "noroeste", "costa-verde", "medio-paraiba", "centro-sul",
+];
+const CATEGORIAS_ESPERADAS = [
+  "Mobilidade", "Política", "Economia", "Segurança", "Saúde",
+  "Educação", "Turismo", "Meio Ambiente", "Tecnologia", "Cultura", "Esportes",
+];
 
 // ─── Grupos de fontes e limites ────────────────────────────────────────────
 const GRUPOS = {
@@ -476,6 +484,68 @@ async function resolverAlerta(fonteId, tipo) {
   if (!res.ok) console.error(`Resolver alerta fonte ${fonteId} (${tipo}): ${res.status}`);
 }
 
+async function fetchContagem24h(view, campo) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${view}?select=*`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!res.ok) { console.error(`${view}: ${res.status}`); return new Set(); }
+  const data = await res.json();
+  return new Set(data.filter(r => r.total > 0).map(r => r[campo]));
+}
+
+async function atualizarContadorAnomalia(chave, presente, tipo, label) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/anomalias_contador?chave=eq.${encodeURIComponent(chave)}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  const rows = res.ok ? await res.json() : [];
+  const atual = rows[0]?.consecutivo || 0;
+
+  if (presente) {
+    if (atual > 0) {
+      await fetch(`${SUPABASE_URL}/rest/v1/anomalias_contador`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ chave, consecutivo: 0 }),
+      });
+      if (atual >= LIMITE_FALHAS_PARA_ALERTA) {
+        await fetch(`${SUPABASE_URL}/rest/v1/${ALERTAS_TABLE}?fonte_nome=eq.${encodeURIComponent(label)}&resolvido=eq.false&tipo=eq.${tipo}`, {
+          method: "PATCH",
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ resolvido: true, resolvido_em: new Date().toISOString() }),
+        });
+      }
+    }
+    return;
+  }
+
+  const novo = atual + 1;
+  await fetch(`${SUPABASE_URL}/rest/v1/anomalias_contador`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ chave, consecutivo: novo }),
+  });
+  if (novo === LIMITE_FALHAS_PARA_ALERTA) {
+    await fetch(`${SUPABASE_URL}/rest/v1/${ALERTAS_TABLE}`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify([{ fonte_id: null, fonte_nome: label, falhas_consecutivas: novo, tipo, detalhe: `Nenhuma notícia inserida nas últimas 24h, por ${novo} verificações seguidas.` }]),
+    });
+  }
+}
+
+async function verificarAnomalias() {
+  const [regioesPresentes, categoriasPresentes] = await Promise.all([
+    fetchContagem24h("contagem_regiao_24h", "regiao"),
+    fetchContagem24h("contagem_categoria_24h", "categoria"),
+  ]);
+  for (const r of REGIOES_ESPERADAS) {
+    await atualizarContadorAnomalia(`regiao:${r}`, regioesPresentes.has(r), "regiao_ausente", `Região: ${r}`);
+  }
+  for (const c of CATEGORIAS_ESPERADAS) {
+    await atualizarContadorAnomalia(`categoria:${c}`, categoriasPresentes.has(c), "categoria_ausente", `Categoria: ${c}`);
+  }
+    }
+
 // Falhas de fetch (erro_fetch consecutivo).
 async function atualizarStatusFalha(fonte, sucesso) {
   const atual = fonte.falhas_consecutivas_atual || 0;
@@ -611,6 +681,7 @@ export default async function handler(req, res) {
     }
 
     await registrarSaude(registrosSaude);
+    await verificarAnomalias();
 
     return res.status(200).json({
       ok: true,
