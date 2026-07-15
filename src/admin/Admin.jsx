@@ -66,6 +66,8 @@ const TIPO_ALERTA = {
   falha_fetch:  { icon: "🔴", label: "Falha ao buscar feed" },
   zero_itens:   { icon: "🧊", label: "Feed congelado (0 itens novos)" },
   queda_volume: { icon: "📉", label: "Queda de volume" },
+  regiao_ausente:    { icon: "📍", label: "Região sem notícias em 24h" },
+  categoria_ausente: { icon: "🏷️", label: "Categoria sem notícias em 24h" },
 };
 
 export function AdminDashboard() {
@@ -92,7 +94,7 @@ export function AdminDashboard() {
       ultimas.push(row);
     }
     setSaude(ultimas);
-    setAlertas((alertasData || []).filter(a => idsAtivos.has(a.fonte_id)));
+    setAlertas((alertasData || []).filter(a => a.fonte_id === null || idsAtivos.has(a.fonte_id)));
     setLoading(false);
   };
 
