@@ -3,6 +3,8 @@ import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 import { AdminLogin, AdminDashboard, RequireAuth } from "./admin/Admin.jsx";
 import { AdminInsights } from "./admin/Insights.jsx";
+import { FONTES_OFICIAIS, FONTES_GENERICAS, curarFeedCompleto } from "./lib/curadoria.js";
+
 // ─── Paginação ──────────────────────────────────────────────────────────────
 const ITEMS_PER_PAGE = 24; // notícias por página a partir da página 2
 
@@ -30,151 +32,6 @@ const BAIXADA_CITIES = [
   "Nova Iguaçu","Duque de Caxias","Belford Roxo","Nilópolis",
   "Mesquita","Queimados","São João de Meriti","Japeri","Seropédica","Itaguaí",
 ];
-
-// Fontes Oficiais — limitadas na Home
-const FONTES_OFICIAIS = new Set([
-  "Prefeitura do Rio","Prefeitura de Niterói","Prefeitura de Cabo Frio",
-  "Prefeitura de Volta Redonda","Prefeitura de Casimiro de Abreu","Prefeitura de Macaé",
-  "Prefeitura de Japeri","Prefeitura de Mangaratiba","Prefeitura de Maricá",
-  "Prefeitura de Cabo Frio (Oficial)",
-  // ─── Novas prefeituras ───
-  "Prefeitura de Nilópolis","Prefeitura de Paracambi","Prefeitura de Porciúncula",
-  "Prefeitura de Quatis","Prefeitura de Queimados","Prefeitura de Quissamã",
-  "Prefeitura de Rio Bonito","Centro de Operações Rio",
-]);
-
-// ─── Fontes genéricas (conteúdo nacional, sem recorte do Estado do RJ) ─────
-// Entram só como tempero ocasional — nunca competem de igual com o
-// jornalismo regional. Ver curarFeedCompleto: maxGenericasPorPagina.
-const FONTES_GENERICAS = new Set([
-  "Tua Saúde","Guia do Estudante (Abril)","Fuxico TV","Caras",
-  "Revista PEGN (Globo)","Saúde Abril","Casa da Ciência","InfoMoney",
-]);
-
-// ─── Ordem de prioridade das categorias (rotaciona a cada sessão) ───────────
-// O leitor NÃO vê essas categorias — são só para organização interna.
-const PRIORIDADE_BASE = [
-  "Segurança","Política","Saúde","Economia",
-  "Educação","Turismo","Cultura","Esportes",
-  "Meio Ambiente","Tecnologia","Geral",
-];
-
-// Rotaciona o array por N posições
-function rotacionar(arr, n) {
-  const pos = n % arr.length;
-  return [...arr.slice(pos), ...arr.slice(0, pos)];
-}
-
-// A cada hora do dia, uma prioridade diferente está em primeiro
-function getPrioridadeAtual() {
-  const hora = new Date().getHours();
-  return rotacionar(PRIORIDADE_BASE, hora % PRIORIDADE_BASE.length);
-}
-
-// ─── Algoritmo editorial ────────────────────────────────────────────────────
-// Organiza o pool por categoria (prioridade rotativa) e dentro de cada
-// categoria garante diversidade de fontes (1 por fonte).
-// O leitor vê um fluxo contínuo — sem títulos nem rótulos de categoria.
-function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxPorFontePorPagina = 4, maxGenericasPorPagina = 1) {
-  const prioridade = getPrioridadeAtual();
-
-  // 1) Agrupar por categoria, mantendo a ordem cronológica dentro do grupo
-  const grupos = {};
-  for (const cat of prioridade) grupos[cat] = [];
-  if (!grupos["Geral"]) grupos["Geral"] = [];
-  for (const n of pool) {
-    const cat = n.category in grupos ? n.category : "Geral";
-    grupos[cat].push(n);
-  }
-
-  // 2) Intercalar categorias em round-robin (prioridade), sem descartar nada
-  const filas = prioridade.map(cat => [...(grupos[cat] || [])]);
-  const intercalado = [];
-  let restante = filas.reduce((soma, f) => soma + f.length, 0);
-  let idx = 0;
-  while (restante > 0) {
-    const fila = filas[idx % filas.length];
-    if (fila.length > 0) {
-      intercalado.push(fila.shift());
-      restante--;
-    }
-    idx++;
-  }
-
-  // 3) Seleção final, item por item, respeitando TRÊS regras ao mesmo tempo:
-  //    - cooldown por fonte (nunca a mesma fonte antes de MIN_GAP posições);
-  //    - limite de oficiais por bloco de página (nunca mais que maxOficiais
-  //      oficiais dentro de um mesmo bloco de itemsPerPage);
-  //    - limite de aparições por fonte por bloco de página (nunca mais que
-  //      maxPorFontePorPagina da MESMA fonte dentro de um mesmo bloco — o
-  //      excedente é adiado pra um bloco/página seguinte).
-  // Tudo numa única passada — nenhum item é movido depois de posicionado,
-  // então uma regra nunca desfaz o trabalho da outra.
-  const MIN_GAP = 3;
-
-  const porFonte = new Map();
-  for (const n of intercalado) {
-    if (!porFonte.has(n.source)) porFonte.set(n.source, []);
-    porFonte.get(n.source).push(n);
-  }
-  const fontes = [...porFonte.keys()];
-
-  const resultado = [];
-  const liberaEm = new Map();
-  let posicao = 0;
-  let ponteiro = 0; // avança em rodízio — dá a MESMA prioridade pra fonte
-                    // grande e pequena, em vez de sempre preferir quem tem
-                    // mais itens (o que empurrava prefeituras e fontes
-                    // pequenas pra páginas muito distantes).
-  const totalItens = intercalado.length;
-
-  const escolherFonte = ({ respeitarOficiais, respeitarCooldown, respeitarMaxPorFonte, respeitarGenericas }) => {
-    const inicioBloco = Math.floor(posicao / itemsPerPage) * itemsPerPage;
-    const itensDoBloco = resultado.slice(inicioBloco, posicao);
-    const oficiaisNoBloco = respeitarOficiais
-      ? itensDoBloco.filter(n => n.isOficial).length
-      : -Infinity;
-    const genericasNoBloco = respeitarGenericas
-      ? itensDoBloco.filter(n => n.isGenerica).length
-      : -Infinity;
-
-    for (let tentativa = 0; tentativa < fontes.length; tentativa++) {
-      const i = (ponteiro + tentativa) % fontes.length;
-      const fonte = fontes[i];
-      const fila = porFonte.get(fonte);
-      if (fila.length === 0) continue;
-      if (respeitarCooldown && (liberaEm.get(fonte) ?? 0) > posicao) continue;
-      if (respeitarOficiais && fila[0].isOficial && oficiaisNoBloco >= maxOficiais) continue;
-      if (respeitarGenericas && fila[0].isGenerica && genericasNoBloco >= maxGenericasPorPagina) continue;
-      if (respeitarMaxPorFonte) {
-        const jaNoBloco = itensDoBloco.filter(n => n.source === fonte).length;
-        if (jaNoBloco >= maxPorFontePorPagina) continue;
-      }
-      ponteiro = (i + 1) % fontes.length; // próxima busca já começa depois desta
-      return fonte;
-    }
-    return null;
-  };
-
-  while (resultado.length < totalItens) {
-    // Tenta respeitando todas as regras; se não achar candidato, relaxa em
-    // cascata, pra nunca travar e nunca descartar notícia. O limite de
-    // genéricas é o ÚLTIMO a ser relaxado — só permite genérica se
-    // literalmente não sobrar mais nenhuma fonte regional disponível.
-    let fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true, respeitarMaxPorFonte: true, respeitarGenericas: true });
-    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true, respeitarMaxPorFonte: false, respeitarGenericas: true });
-    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: true, respeitarMaxPorFonte: false, respeitarGenericas: true });
-    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: false, respeitarMaxPorFonte: false, respeitarGenericas: true });
-    if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: false, respeitarMaxPorFonte: false, respeitarGenericas: false });
-
-    const item = porFonte.get(fonte).shift();
-    resultado.push(item);
-    liberaEm.set(fonte, posicao + MIN_GAP);
-    posicao++;
-  }
-
-  return resultado;
-}
 
 // ─── Identidade visual ──────────────────────────────────────────────────────
 const categoryColors = {
@@ -361,7 +218,6 @@ function NewsCard({ news }) {
 function Pagination({ currentPage, totalPages, onNavigate }) {
   if (totalPages <= 1) return null;
 
-  // Gera lista de páginas visíveis com reticências
   const getPageNumbers = () => {
     const delta = 1;
     const range = [];
@@ -502,24 +358,14 @@ function AppContent({ currentPage, goToPage }) {
     : news.filter(n => n.region === activeRegion);
 
   // ─── Paginação ──────────────────────────────────────────────────────────
-  // Paginação por URL só se aplica em "Todo o Estado". Com filtro de região
-  // ativo, mantém o comportamento atual: lista única, sem paginação.
   const paginacaoAtiva = activeRegion === "todos";
   const PAGE1_SIZE = 32;
 
-  // Feed inteiro, uma única vez: intercalado por categoria, espaçado por
-  // fonte e com limite de oficiais por bloco de página — cobrindo TODAS as
-  // páginas, não só a primeira. Nenhuma notícia é descartada, só reordenada.
   const feedCurado = useMemo(
     () => curarFeedCompleto(pool, PAGE1_SIZE, 4, 2, 1),
     [pool]
   );
 
-  // Embaralha a ORDEM VISUAL da página 1 (só o display, não muda quais
-  // notícias entram no feedCurado nem afeta a paginação 2+). Recalcula só
-  // quando o feedCurado muda (ou seja, uma vez por sessão/carregamento) —
-  // fica estável enquanto o leitor navega entre páginas, mas volta a variar
-  // numa próxima visita, devolvendo o ar de "ao vivo" da home.
   const pagina1Embaralhada = useMemo(() => {
     const copia = feedCurado.slice(0, PAGE1_SIZE);
     for (let i = copia.length - 1; i > 0; i--) {
@@ -536,7 +382,7 @@ function AppContent({ currentPage, goToPage }) {
     : 1;
 
   const cards = !paginacaoAtiva
-    ? pagina1Embaralhada // região filtrada: comportamento atual, sem paginação
+    ? pagina1Embaralhada
     : currentPage === 1
       ? pagina1Embaralhada
       : feedCurado.slice(
@@ -544,15 +390,12 @@ function AppContent({ currentPage, goToPage }) {
           PAGE1_SIZE + (currentPage - 1) * ITEMS_PER_PAGE
         );
 
-  // Título da página (SEO)
   useEffect(() => {
     document.title = currentPage === 1
       ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
       : `Circular Notícias RJ — Página ${currentPage}`;
   }, [currentPage]);
 
-  // Se o usuário estiver numa página que deixou de existir (ex: dados
-  // mudaram), volta pra página 1 em vez de mostrar uma tela vazia.
   useEffect(() => {
     if (!loading && paginacaoAtiva && currentPage > totalPages && totalPages > 0) {
       goToPage(1);
@@ -612,7 +455,7 @@ Responda APENAS com JSON válido, sem markdown.`,
               <button key={r.id} onClick={() => {
                 setActiveRegion(r.id);
                 setSearchResults(null);
-                if (r.id !== "todos") goToPage(1); // filtro de região não usa paginação por URL
+                if (r.id !== "todos") goToPage(1);
               }}
                 style={{ background:activeRegion===r.id?"#3b82f6":"transparent", border:"1px solid "+(activeRegion===r.id?"#3b82f6":"rgba(255,255,255,0.12)"), borderRadius:6, padding:"5px 12px", color:activeRegion===r.id?"#fff":"#94a3b8", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s" }}>
                 {r.label}
