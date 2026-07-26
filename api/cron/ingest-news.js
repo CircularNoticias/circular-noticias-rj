@@ -10,6 +10,13 @@
 //   - zero_itens:    feed responde, mas 0 itens novos são inseridos
 //                     (feed "congelado", caso descoberto com O Dia)
 //   - queda_volume:  volume inserido muito abaixo da média histórica da fonte
+//
+// Scraping genérico: substitui o antigo serviço externo "rssgenfix"
+// (desativado, retornando 502) para as fontes sem RSS nativo. Visita a home
+// da fonte, extrai links de notícia por heurística, e lê metadados
+// (Open Graph / <title>) de cada página. Fontes com estrutura de site muito
+// diferente podem receber um scraper próprio em SCRAPERS_ESPECIAIS, sem
+// afetar as demais.
 
 import { XMLParser } from "fast-xml-parser";
 import { recoverImage, getFallbackImage, resetStats, getStatsResumo } from "../../src/lib/imageRecovery.js";
@@ -131,10 +138,10 @@ const SAUDE_TABLE     = "fontes_saude";
 const ALERTAS_TABLE   = "alertas_fontes";
 const SUPABASE_URL    = process.env.SUPABASE_URL;
 const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const FEED_API_KEY    = process.env.FEED_API_KEY;
 const CRON_SECRET     = process.env.CRON_SECRET;
-const FEED_BASE       = "https://rssgenfix-7qjtnnnf.manus.space";
 
+// Fontes sem RSS nativo que passam pelo scraping genérico (antes atendidas
+// pelo serviço externo "rssgenfix", hoje desativado/502).
 const ALLOWLIST = new Set([
   "g1.globo.com", "noticias.r7.com", "meiahora.com.br",
   "www.meiahora.com.br", "atribunarj.com.br", "folhadoslagos.com",
@@ -294,7 +301,7 @@ function getEstrategia(fonte) {
   if (!fonte.url) return "sem_suporte";
   try {
     const host = new URL(normalizarUrl(fonte.url)).hostname;
-    if ([...ALLOWLIST].some(d => host.includes(d))) return "scraping_manus";
+    if ([...ALLOWLIST].some(d => host.includes(d))) return "scraping_generico";
   } catch { /* continua */ }
   return "sem_suporte";
 }
@@ -333,19 +340,104 @@ async function fetchRssNativo(url) {
   return { xml: await res.text(), ms };
 }
 
-async function fetchFeedXml(sourceUrl) {
-  const inicio = Date.now();
-  const url = `${FEED_BASE}/api/feed?url=${encodeURIComponent(sourceUrl)}&key=${FEED_API_KEY}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-  const ms = Date.now() - inicio;
-  if (!res.ok) return { xml: null, ms };
-  return { xml: await res.text(), ms };
-}
-
 function parseRssItems(xml) {
   const json = new XMLParser({ ignoreAttributes: false }).parse(xml);
   const items = json?.rss?.channel?.item || [];
   return Array.isArray(items) ? items : [items];
+}
+
+// ─── Scraping genérico (substitui o rssgenfix morto) ───────────────────────
+// Tratamento especial por fonte, se o genérico não funcionar bem para ela.
+// Basta adicionar uma função aqui e registrá-la no objeto abaixo.
+const SCRAPERS_ESPECIAIS = {
+  // "Nome Exato da Fonte": minhaFuncaoEspecial,
+};
+
+function extrairMetaTag(html, prop) {
+  const re1 = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`,
+    "i"
+  );
+  const re2 = new RegExp(
+    `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`,
+    "i"
+  );
+  const m = html.match(re1) || html.match(re2);
+  return m ? m[1] : null;
+}
+
+function extrairMetadadosPagina(html) {
+  const tituloTag = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1];
+  const titulo = extrairMetaTag(html, "og:title") || tituloTag || null;
+  const descricao = extrairMetaTag(html, "og:description") || extrairMetaTag(html, "description") || "";
+  const imagem = extrairMetaTag(html, "og:image");
+  return {
+    titulo: titulo ? limparHtml(titulo) : null,
+    descricao,
+    imagem,
+  };
+}
+
+function extrairLinksNoticias(html, baseUrl) {
+  const host = new URL(baseUrl).origin;
+  const links = new Set();
+  const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    let href = m[1];
+    if (href.startsWith("/")) href = host + href;
+    if (!href.startsWith(host)) continue;
+    // Heurística: caminhos de notícia tendem a ser "profundos" e ter hífens
+    // (evita home, categorias curtas, âncoras, arquivos estáticos).
+    const path = href.replace(host, "");
+    const semQuery = path.split("?")[0].split("#")[0];
+    if (semQuery === "/" || semQuery.length < 12) continue;
+    if (/\.(jpg|jpeg|png|gif|css|js|pdf|xml)$/i.test(semQuery)) continue;
+    if ((semQuery.match(/-/g) || []).length < 2) continue;
+    links.add(href.split("#")[0]);
+  }
+  return [...links];
+}
+
+async function scrapeFonteGenerica(url, nomeFonte, limite = 10) {
+  const inicio = Date.now();
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "pt-BR,pt;q=0.9",
+  };
+
+  const homeRes = await fetch(url, { signal: AbortSignal.timeout(15000), headers });
+  if (!homeRes.ok) return { items: [], ms: Date.now() - inicio };
+  const homeHtml = await homeRes.text();
+
+  const candidatos = extrairLinksNoticias(homeHtml, url).slice(0, limite);
+
+  const items = [];
+  for (const link of candidatos) {
+    try {
+      const res = await fetch(link, { signal: AbortSignal.timeout(10000), headers });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const { titulo, descricao, imagem } = extrairMetadadosPagina(html);
+      if (!titulo) continue;
+      items.push({
+        title: titulo,
+        description: descricao,
+        link,
+        pubDate: new Date().toISOString(),
+        enclosure: imagem ? { "@_url": imagem } : undefined,
+      });
+    } catch { /* pula essa notícia, segue as outras */ }
+  }
+
+  return { items, ms: Date.now() - inicio };
+}
+
+async function scrapeFonte(fonte, limite) {
+  const especial = SCRAPERS_ESPECIAIS[fonte.nome];
+  if (especial) return especial(fonte, limite);
+  return scrapeFonteGenerica(normalizarUrl(fonte.url), fonte.nome, limite);
 }
 
 // ─── Inserção de notícias (com recuperação de imagem + fila de pendentes) ──
@@ -372,8 +464,8 @@ async function upsertNoticias(items, fonte, limite) {
       data_publicacao: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
       processado_ia:   false,
     };
-  });
-
+  })
+  
   const rows = await Promise.all(rowsBase.map(async row => {
     if (row.imagem_url) {
       row.imagem_origem = "rss";
@@ -544,7 +636,7 @@ async function verificarAnomalias() {
   for (const c of CATEGORIAS_ESPERADAS) {
     await atualizarContadorAnomalia(`categoria:${c}`, categoriasPresentes.has(c), "categoria_ausente", `Categoria: ${c}`);
   }
-    }
+}
 
 // Falhas de fetch (erro_fetch consecutivo).
 async function atualizarStatusFalha(fonte, sucesso) {
@@ -635,16 +727,20 @@ export default async function handler(req, res) {
         continue;
       }
 
-      let xml = null, ms = 0;
+      let items = [], ms = 0;
       try {
-        const resultado = estrategia === "rss_nativo"
-          ? await fetchRssNativo(fonte.rss_url)
-          : await fetchFeedXml(normalizarUrl(fonte.url));
-        xml = resultado.xml;
-        ms  = resultado.ms;
-      } catch { /* xml permanece null */ }
+        if (estrategia === "rss_nativo") {
+          const r = await fetchRssNativo(fonte.rss_url);
+          ms = r.ms;
+          if (r.xml) items = parseRssItems(r.xml);
+        } else if (estrategia === "scraping_generico") {
+          const r = await scrapeFonte(fonte, getLimite(fonte.nome));
+          ms = r.ms;
+          items = r.items;
+        }
+      } catch { /* items permanece [] */ }
 
-      if (!xml) {
+      if (!items.length) {
         await atualizarStatusFalha(fonte, false);
         resultados.push({ fonte: fonte.nome, status: "erro_fetch", estrategia });
         registrosSaude.push({
@@ -657,7 +753,6 @@ export default async function handler(req, res) {
 
       await atualizarStatusFalha(fonte, true);
 
-      const items    = parseRssItems(xml);
       const limite   = getLimite(fonte.nome);
       const inseridas = await upsertNoticias(items, fonte, limite);
       totalInseridas += inseridas;
