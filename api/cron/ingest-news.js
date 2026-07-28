@@ -17,6 +17,11 @@
 // (Open Graph / <title>) de cada página. Fontes com estrutura de site muito
 // diferente podem receber um scraper próprio em SCRAPERS_ESPECIAIS, sem
 // afetar as demais.
+//
+// fetchRssNativo: captura o motivo real do erro (status HTTP ou exceção,
+// incluindo timeout) e faz uma segunda tentativa antes de desistir. O
+// motivo é logado via console.error e devolvido no JSON de resposta do
+// cron, para diagnóstico sem precisar de nova coluna no banco.
 
 import { XMLParser } from "fast-xml-parser";
 import { recoverImage, getFallbackImage, resetStats, getStatsResumo } from "../../src/lib/imageRecovery.js";
@@ -151,6 +156,10 @@ const ALLOWLIST = new Set([
 // ─── Utilitários ────────────────────────────────────────────────────────────
 function semAcentos(s) {
   return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function limparHtml(raw) {
@@ -325,19 +334,44 @@ async function fetchMediaItens() {
   return new Map(data.map(r => [r.fonte_id, Number(r.media_itens)]));
 }
 
-async function fetchRssNativo(url) {
-  const inicio = Date.now();
-  const res = await fetch(url, {
-    signal: AbortSignal.timeout(15000),
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-    },
-  });
-  const ms = Date.now() - inicio;
-  if (!res.ok) return { xml: null, ms };
-  return { xml: await res.text(), ms };
+// fetchRssNativo: 2 tentativas (com 1.5s de espera entre elas), e sempre
+// devolve o motivo real da falha (status HTTP ou mensagem da exceção,
+// incluindo timeout) em vez de descartá-lo silenciosamente.
+async function fetchRssNativo(url, tentativas = 2) {
+  let ms = 0;
+  let ultimoErro = null;
+
+  for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
+    const inicio = Date.now();
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        },
+      });
+      ms = Date.now() - inicio;
+
+      if (!res.ok) {
+        ultimoErro = `HTTP ${res.status}`;
+        if (tentativa < tentativas) { await sleep(1500); continue; }
+        return { xml: null, ms, erro: ultimoErro };
+      }
+
+      return { xml: await res.text(), ms, erro: null };
+    } catch (e) {
+      ms = Date.now() - inicio;
+      ultimoErro = (e.name === "TimeoutError" || e.name === "AbortError")
+        ? "timeout (15s)"
+        : (e.message || String(e));
+      if (tentativa < tentativas) { await sleep(1500); continue; }
+      return { xml: null, ms, erro: ultimoErro };
+    }
+  }
+
+  return { xml: null, ms, erro: ultimoErro };
 }
 
 function parseRssItems(xml) {
@@ -439,7 +473,6 @@ async function scrapeFonte(fonte, limite) {
   if (especial) return especial(fonte, limite);
   return scrapeFonteGenerica(normalizarUrl(fonte.url), fonte.nome, limite);
 }
-
 // ─── Inserção de notícias (com recuperação de imagem + fila de pendentes) ──
 async function upsertNoticias(items, fonte, limite) {
   const fatia = items.slice(0, limite);
@@ -465,7 +498,7 @@ async function upsertNoticias(items, fonte, limite) {
       processado_ia:   false,
     };
   })
-  
+
   const rows = await Promise.all(rowsBase.map(async row => {
     if (row.imagem_url) {
       row.imagem_origem = "rss";
@@ -727,22 +760,26 @@ export default async function handler(req, res) {
         continue;
       }
 
-      let items = [], ms = 0;
+      let items = [], ms = 0, erroDetalhe = null;
       try {
         if (estrategia === "rss_nativo") {
           const r = await fetchRssNativo(fonte.rss_url);
           ms = r.ms;
+          erroDetalhe = r.erro;
           if (r.xml) items = parseRssItems(r.xml);
         } else if (estrategia === "scraping_generico") {
           const r = await scrapeFonte(fonte, getLimite(fonte.nome));
           ms = r.ms;
           items = r.items;
         }
-      } catch { /* items permanece [] */ }
+      } catch (e) {
+        erroDetalhe = e.message || String(e);
+      }
 
       if (!items.length) {
         await atualizarStatusFalha(fonte, false);
-        resultados.push({ fonte: fonte.nome, status: "erro_fetch", estrategia });
+        console.error(`[ingest] erro_fetch ${fonte.nome}: ${erroDetalhe || "motivo desconhecido"} (${ms}ms)`);
+        resultados.push({ fonte: fonte.nome, status: "erro_fetch", estrategia, erro: erroDetalhe });
         registrosSaude.push({
           fonte_id: fonte.id, fonte_nome: fonte.nome,
           status: "erro_fetch", itens_encontrados: 0,
