@@ -20,8 +20,10 @@
 //
 // fetchRssNativo: captura o motivo real do erro (status HTTP ou exceção,
 // incluindo timeout) e faz uma segunda tentativa antes de desistir. O
-// motivo é logado via console.error e devolvido no JSON de resposta do
-// cron, para diagnóstico sem precisar de nova coluna no banco.
+// motivo é logado via console.error, devolvido no JSON de resposta do cron,
+// e agora também persistido em `fontes.ultimo_erro` e
+// `fontes_saude.erro_detalhe` — assim fica consultável direto no Supabase,
+// sem depender da retenção curta de logs do Vercel (plano Hobby).
 
 import { XMLParser } from "fast-xml-parser";
 import { recoverImage, getFallbackImage, resetStats, getStatsResumo } from "../../src/lib/imageRecovery.js";
@@ -447,7 +449,7 @@ async function scrapeFonteGenerica(url, nomeFonte, limite = 10) {
 
   const candidatos = extrairLinksNoticias(homeHtml, url).slice(0, limite);
 
-  const items = [];
+   const items = [];
   for (const link of candidatos) {
     try {
       const res = await fetch(link, { signal: AbortSignal.timeout(10000), headers });
@@ -473,6 +475,7 @@ async function scrapeFonte(fonte, limite) {
   if (especial) return especial(fonte, limite);
   return scrapeFonteGenerica(normalizarUrl(fonte.url), fonte.nome, limite);
 }
+
 // ─── Inserção de notícias (com recuperação de imagem + fila de pendentes) ──
 async function upsertNoticias(items, fonte, limite) {
   const fatia = items.slice(0, limite);
@@ -671,22 +674,27 @@ async function verificarAnomalias() {
   }
 }
 
-// Falhas de fetch (erro_fetch consecutivo).
-async function atualizarStatusFalha(fonte, sucesso) {
+// Falhas de fetch (erro_fetch consecutivo). Agora também persiste o motivo
+// real do erro em `fontes.ultimo_erro`, para consulta direta no Supabase.
+async function atualizarStatusFalha(fonte, sucesso, erroDetalhe = null) {
   const atual = fonte.falhas_consecutivas_atual || 0;
 
   if (sucesso) {
     if (atual > 0) {
-      await patchFonte(fonte.id, { falhas_consecutivas_atual: 0 });
+      await patchFonte(fonte.id, { falhas_consecutivas_atual: 0, ultimo_erro: null });
       if (atual >= LIMITE_FALHAS_PARA_ALERTA) await resolverAlerta(fonte.id, "falha_fetch");
     }
     return;
   }
 
   const novo = atual + 1;
-  await patchFonte(fonte.id, { falhas_consecutivas_atual: novo });
+  await patchFonte(fonte.id, {
+    falhas_consecutivas_atual: novo,
+    ultimo_erro: erroDetalhe || "motivo desconhecido",
+  });
   if (novo === LIMITE_FALHAS_PARA_ALERTA) {
-    await criarAlerta(fonte, novo, "falha_fetch", `${novo} falhas consecutivas ao buscar o feed.`);
+    await criarAlerta(fonte, novo, "falha_fetch",
+      `${novo} falhas consecutivas ao buscar o feed. Último erro: ${erroDetalhe || "motivo desconhecido"}.`);
   }
 }
 
@@ -756,6 +764,7 @@ export default async function handler(req, res) {
           fonte_id: fonte.id, fonte_nome: fonte.nome,
           status: "sem_suporte", itens_encontrados: 0,
           itens_inseridos: 0, tempo_resposta_ms: 0, falhas_consecutivas: 0,
+          erro_detalhe: null,
         });
         continue;
       }
@@ -777,13 +786,14 @@ export default async function handler(req, res) {
       }
 
       if (!items.length) {
-        await atualizarStatusFalha(fonte, false);
+        await atualizarStatusFalha(fonte, false, erroDetalhe);
         console.error(`[ingest] erro_fetch ${fonte.nome}: ${erroDetalhe || "motivo desconhecido"} (${ms}ms)`);
         resultados.push({ fonte: fonte.nome, status: "erro_fetch", estrategia, erro: erroDetalhe });
         registrosSaude.push({
           fonte_id: fonte.id, fonte_nome: fonte.nome,
           status: "erro_fetch", itens_encontrados: 0,
           itens_inseridos: 0, tempo_resposta_ms: ms, falhas_consecutivas: 1,
+          erro_detalhe: erroDetalhe,
         });
         continue;
       }
@@ -809,6 +819,7 @@ export default async function handler(req, res) {
         status: "ok", itens_encontrados: items.length,
         itens_inseridos: inseridas,
         tempo_resposta_ms: ms, falhas_consecutivas: 0,
+        erro_detalhe: null,
       });
     }
 
@@ -827,3 +838,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+  
