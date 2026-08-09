@@ -136,7 +136,7 @@ function mapRow(row) {
     summary:   stripHtml(row.resumo),
     source:    row.fonte_nome || "",
     sourceUrl: row.url_original || "",
-    image:     row.imagem_url || null,
+    image:     row.imagem_origem === "fallback" ? null : (row.imagem_url || null),
     isOficial: FONTES_OFICIAIS.has(row.fonte_nome),
     isGenerica: FONTES_GENERICAS.has(row.fonte_nome),
     date, time,
@@ -336,7 +336,7 @@ function AppContent({ currentPage, goToPage }) {
       setLoading(true); setError(null);
       const { data, error: e } = await supabase
         .from("noticias")
-        .select("id,titulo,resumo,fonte_nome,url_original,cidade,categoria,regiao,imagem_url,created_at")
+        .select("id,titulo,resumo,fonte_nome,url_original,cidade,categoria,regiao,imagem_url,imagem_origem,created_at")
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(1000);
@@ -351,6 +351,13 @@ function AppContent({ currentPage, goToPage }) {
     })();
     return () => { mounted = false; };
   }, []);
+
+  // Pool filtrado por região
+  const pool = activeRegion === "todos"
+    ? news
+    : news.filter(n => n.region === activeRegion);
+    
+  
 
   // Pool filtrado por região
   const pool = activeRegion === "todos"
