@@ -139,7 +139,13 @@ async function buscarHtmlDaNoticia(url, timeoutMs = 6000) {
 
 // ─── Etapa 4: fallback institucional por categoria ─────────────────────────
 function aplicarFallback(noticia) {
-  return { imagem_url: getFallbackImage(noticia.categoria), imagem_origem: "fallback" };
+  // Não usamos mais getFallbackImage() para preencher imagem_url — a ausência
+  // de imagem real passa a ser um estado explícito (imagem_url = null), e o
+  // frontend decide como apresentar isso. imagem_origem continua "fallback"
+  // para preservar o registro de que a recuperação foi tentada e não achou
+  // imagem real (getFallbackImage/FALLBACK_MANIFEST permanecem disponíveis
+  // no módulo, sem uso automático aqui).
+  return { imagem_url: null, imagem_origem: "fallback" };
 }
 
 // ─── Função principal ───────────────────────────────────────────────────────
