@@ -510,11 +510,14 @@ async function upsertNoticias(items, fonte, limite) {
     }
 
     if (recuperacoesUsadas >= MAX_RECUPERACOES_POR_EXECUCAO) {
-      row.imagem_url = getFallbackImage(row.categoria);
-      row.imagem_origem = "fallback";
-      row.imagem_pendente = true;
-      return row;
-    }
+  // Orçamento do ciclo esgotado: não fabrica imagem artificial. Fica
+  // imagem_url = null, imagem_origem = "fallback" e imagem_pendente = true
+  // para que a Fase 2 (recover-images.js) tente novamente depois.
+  row.imagem_url = null;
+  row.imagem_origem = "fallback";
+  row.imagem_pendente = true;
+  return row;
+  }
 
     recuperacoesUsadas++;
     const resultado = await recoverImage(row);
