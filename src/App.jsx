@@ -166,8 +166,6 @@ function Logo({ size = 42 }) {
 
 function NewsCard({ news }) {
   const color  = categoryColors[news.category] || "#64748b";
-  const bgImg  = categoryGradients[news.category] || categoryGradients["Geral"];
-  const icon   = categoryIcons[news.category] || "📰";
   const [imgErr, setImgErr] = useState(false);
   const showImg = news.image && !imgErr;
   const open = () => news.sourceUrl && window.open(news.sourceUrl, "_blank", "noopener,noreferrer");
@@ -178,42 +176,28 @@ function NewsCard({ news }) {
       style={{ background:"#fff", borderRadius:12, boxShadow:"0 2px 12px rgba(0,0,0,0.07)", overflow:"hidden", cursor:"pointer", transition:"transform 0.15s,box-shadow 0.15s", display:"flex", flexDirection:"column", border:"1px solid #f1f5f9" }}
       onMouseEnter={e => { e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 6px 24px rgba(0,0,0,0.12)"; }}
       onMouseLeave={e => { e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.07)"; }}>
-      <div style={{ width:"100%", height:140, position:"relative", background: showImg ? "#e2e8f0" : bgImg, flexShrink:0 }}>
-        {showImg
-          ? <img src={news.image} alt={news.headline} onError={() => setImgErr(true)} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
-          : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:6 }}>
-              <span style={{ fontSize:32 }}>{icon}</span>
-              <span style={{ color:"rgba(255,255,255,0.7)", fontSize:10, fontWeight:700, letterSpacing:1 }}>{news.category.toUpperCase()}</span>
+      {showImg && (
+        <div style={{ width:"100%", height:140, position:"relative", background:"#e2e8f0", flexShrink:0 }}>
+          <img src={news.image} alt={news.headline} onError={() => setImgErr(true)} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
+          <div style={{ position:"absolute", bottom:0, left:0, height:4, width:"100%", background:color }}/>
+          {news.isOficial && (
+            <div style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.6)", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:8 }}>
+              OFICIAL
             </div>
-        }
-        <div style={{ position:"absolute", bottom:0, left:0, height:4, width:"100%", background:color }}/>
-        {news.isOficial && (
-          <div style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.6)", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:8 }}>
+          )}
+        </div>
+      )}
+      <div style={{ padding:"14px 16px 16px", flex:1, display:"flex", flexDirection:"column", gap:8 }}>
+        {!showImg && news.isOficial && (
+          <div style={{ alignSelf:"flex-start", background:"#1e293b", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:8 }}>
             OFICIAL
           </div>
         )}
-      </div>
-      <div style={{ padding:"14px 16px 16px", flex:1, display:"flex", flexDirection:"column", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
           <span style={{ background:color+"18", color, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{news.category}</span>
           {news.city && <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>📍 {news.city}</span>}
         </div>
-        <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:"#1e293b", lineHeight:1.4 }}>{news.headline}</h3>
-        <div style={{ display:"flex", alignItems:"flex-start", gap:6, background:"#f8fafc", borderRadius:8, padding:"8px 10px" }}>
-          <span style={{ color:"#6366f1", marginTop:1, fontSize:12 }}>✦</span>
-          <p style={{ margin:0, fontSize:12, color:"#475569", lineHeight:1.55, flex:1 }}>
-            {(news.summary || "").slice(0, 120)}{(news.summary || "").length > 120 ? "..." : ""}
-          </p>
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:"auto" }}>
-          <span style={{ fontSize:11, color:"#0ea5e9", fontWeight:600 }}>{news.source}</span>
-          <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>{news.date} · {news.time}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+        
 // ─── Componente de Paginação ────────────────────────────────────────────────
 function Pagination({ currentPage, totalPages, onNavigate }) {
   if (totalPages <= 1) return null;
@@ -358,11 +342,6 @@ function AppContent({ currentPage, goToPage }) {
     : news.filter(n => n.region === activeRegion);
     
   
-
-  // Pool filtrado por região
-  const pool = activeRegion === "todos"
-    ? news
-    : news.filter(n => n.region === activeRegion);
 
   // ─── Paginação ──────────────────────────────────────────────────────────
   const paginacaoAtiva = activeRegion === "todos";
