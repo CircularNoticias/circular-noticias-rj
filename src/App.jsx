@@ -193,17 +193,23 @@ function NewsCard({ news }) {
             OFICIAL
           </div>
         )}
-        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-          <span style={{ background:color+"18", color, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>{news.category}</span>
-          {news.city && <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>📍 {news.city}</span>}
-        </div>
-        <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:"#1e293b", lineHeight:1.4 }}>{news.headline}</h3>
-        <div style={{ display:"flex", alignItems:"flex-start", gap:6, background:"#f8fafc", borderRadius:8, padding:"8px 10px" }}>
-          <span style={{ color:"#6366f1", marginTop:1, fontSize:12 }}>✦</span>
-          <p style={{ margin:0, fontSize:12, color:"#475569", lineHeight:1.55, flex:1 }}>
+        <h3 style={{ margin:0, fontSize:19, fontWeight:700, color:"#1e293b", lineHeight:1.35 }}>{news.headline}</h3>
+        <div style={{ background:"#f8fafc", borderRadius:8, padding:"10px 12px" }}>
+          <p style={{ margin:0, fontSize:15, color:"#475569", lineHeight:1.5 }}>
             {(news.summary || "").slice(0, 120)}{(news.summary || "").length > 120 ? "..." : ""}
           </p>
         </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:"auto" }}>
+          <span style={{ fontSize:11, color:"#0ea5e9", fontWeight:600 }}>{news.source}</span>
+          <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>{news.date} · {news.time}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Componente de Paginação ────────────────────────────────────────────────
+function Pagination({ currentPage, totalPages, onNaviga
         <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:"auto" }}>
           <span style={{ fontSize:11, color:"#0ea5e9", fontWeight:600 }}>{news.source}</span>
           <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>{news.date} · {news.time}</span>
