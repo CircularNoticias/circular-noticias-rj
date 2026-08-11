@@ -207,17 +207,6 @@ function NewsCard({ news }) {
     </div>
   );
 }
-
-// ─── Componente de Paginação ────────────────────────────────────────────────
-function Pagination({ currentPage, totalPages, onNaviga
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:"auto" }}>
-          <span style={{ fontSize:11, color:"#0ea5e9", fontWeight:600 }}>{news.source}</span>
-          <span style={{ marginLeft:"auto", fontSize:11, color:"#94a3b8" }}>{news.date} · {news.time}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
         
 // ─── Componente de Paginação ────────────────────────────────────────────────
 function Pagination({ currentPage, totalPages, onNavigate }) {
