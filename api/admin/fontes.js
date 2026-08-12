@@ -86,7 +86,25 @@ async function inserirFonte(payload) {
   return res.json();
 }
 
+function aplicarCors(res) {
+  // Permite que a ferramenta local (arquivo HTML aberto no celular, fora do
+  // domínio da Vercel) consiga chamar este endpoint. O segredo em si (query
+  // "?key=") continua sendo a proteção real; isso só libera o navegador a
+  // fazer a chamada.
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
 export default async function handler(req, res) {
+  aplicarCors(res);
+
+  if (req.method === "OPTIONS") {
+    // Requisição de "preflight" que o navegador dispara automaticamente
+    // antes de um POST com JSON. Só precisa responder OK, sem corpo.
+    return res.status(204).end();
+  }
+
   if (!autorizado(req)) {
     return res.status(401).json({ error: "Não autorizado" });
   }
