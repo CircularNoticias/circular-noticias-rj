@@ -6,8 +6,9 @@
 // credencial nova, e funciona independente de qual conta está logada no
 // dashboard da Supabase, já que fala direto com a REST API do banco.
 //
-// Autenticação: mesmo padrão do cron, via CRON_SECRET (header
-// "Authorization: Bearer <secret>" ou query "?key=<secret>").
+// Autenticação: via ADMIN_SECRET (header "Authorization: Bearer <secret>"
+// ou query "?key=<secret>"), um segredo próprio deste endpoint — separado
+// do CRON_SECRET para não depender de revelar um valor já existente.
 //
 // GET  /api/admin/fontes?key=SEU_SECRET
 //   Lista as fontes cadastradas (id, nome, url, rss_url, regiao, ativo, status).
@@ -21,15 +22,18 @@
 // Supabase não é restaurado. Depois de resolvido, pode ser mantido (é útil
 // para automações futuras) ou removido sem afetar o restante do pipeline.
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const CRON_SECRET  = process.env.CRON_SECRET;
-const FONTES_TABLE = "fontes";
+const SUPABASE_URL  = process.env.SUPABASE_URL;
+const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Usa um segredo próprio (ADMIN_SECRET), separado do CRON_SECRET, para não
+// depender de revelar um valor "Sensitive" já existente na Vercel (que só é
+// mostrado uma vez, na criação, e não pode ser recuperado depois).
+const ADMIN_SECRET  = process.env.ADMIN_SECRET;
+const FONTES_TABLE  = "fontes";
 
 function autorizado(req) {
-  const tokenHeader = req.headers.authorization === `Bearer ${CRON_SECRET}`;
-  const tokenQuery  = req.query?.key === CRON_SECRET;
-  return !CRON_SECRET || tokenHeader || tokenQuery;
+  const tokenHeader = req.headers.authorization === `Bearer ${ADMIN_SECRET}`;
+  const tokenQuery  = req.query?.key === ADMIN_SECRET;
+  return !ADMIN_SECRET || tokenHeader || tokenQuery;
 }
 
 function normalizarUrl(url) {
