@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remover / Desativar fonte — Circular Notícias RJ</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0b1220;
+    color: #e2e8f0;
+    padding: 24px 16px 60px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+  .card {
+    background: #111a2e;
+    border: 1px solid #1e293b;
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .label {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #93a5c9;
+    margin-bottom: 8px;
+  }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px solid #1e293b;
+    background: #0d1526;
+    color: #e2e8f0;
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+  input::placeholder { color: #4b5a78; }
+  button {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:disabled { background: #334155; color: #64748b; }
+  .btn-danger { background: #ef4444; color: #fff; }
+  .btn-danger:disabled { background: #334155; color: #64748b; }
+  .hint { font-size: 13px; color: #64748b; margin-top: -8px; margin-bottom: 16px; line-height: 1.5; }
+  .result-item {
+    background: #0d1526;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .result-nome { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+  .result-meta { font-size: 12px; color: #94a3b8; margin-bottom: 10px; word-break: break-all; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    margin-left: 6px;
+  }
+  .badge-ativo { background: #14532d; color: #86efac; }
+  .badge-inativo { background: #450a0a; color: #fca5a5; }
+  .status-msg { font-size: 14px; margin-top: 14px; padding: 12px; border-radius: 8px; }
+  .status-ok { background: #14532d; color: #86efac; }
+  .status-erro { background: #450a0a; color: #fca5a5; }
+  .status-info { background: #1e293b; color: #93a5c9; }
+</style>
+</head>
+<body>
+
+  <h1>Remover / Desativar fonte</h1>
+  <div class="subtitle">Circular Notícias RJ — desativação direta via API, sem precisar do painel do Supabase.</div>
+
+  <div class="card">
+    <span class="label">Sua senha (ADMIN_SECRET)</span>
+    <input type="password" id="secret" placeholder="A mesma senha usada para adicionar fontes">
+    <div class="hint">Não é enviada a mim nem salva em nenhum lugar — fica só nesta página, no seu navegador, e vai direto pro seu próprio servidor.</div>
+
+    <span class="label">Buscar fonte</span>
+    <input type="text" id="busca" placeholder="Ex: Rlagos, Monitor Mercantil, Clique Diário...">
+    <button class="btn-primary" id="btnBuscar">Buscar</button>
+
+    <div id="resultados"></div>
+    <div id="statusBusca"></div>
+  </div>
+
+  <script>
+    const ENDPOINT = "/api/admin/fontes";
+
+    function pegarSecret() {
+      const v = document.getElementById("secret").value.trim();
+      if (!v) { alert("Digite sua senha (ADMIN_SECRET) primeiro."); }
+      return v;
+    }
+
+    function mostrarStatus(el, tipo, msg) {
+      el.innerHTML = `<div class="status-msg status-${tipo}">${msg}</div>`;
+    }
+
+    async function buscar() {
+      const secret = pegarSecret();
+      if (!secret) return;
+      const termo = document.getElementById("busca").value.trim().toLowerCase();
+      const resultadosEl = document.getElementById("resultados");
+      const statusEl = document.getElementById("statusBusca");
+      resultadosEl.innerHTML = "";
+      mostrarStatus(statusEl, "info", "Buscando...");
+
+      try {
+        const res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(secret)}`);
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          mostrarStatus(statusEl, "erro", "Erro: " + (data.error || res.status));
+          return;
+        }
+
+        const filtradas = termo
+          ? data.fontes.filter(f => (f.nome || "").toLowerCase().includes(termo))
+          : data.fontes;
+
+        if (filtradas.length === 0) {
+          mostrarStatus(statusEl, "info", "Nenhuma fonte encontrada com esse nome.");
+          return;
+        }
+
+        statusEl.innerHTML = "";
+        filtradas.slice(0, 20).forEach(f => renderResultado(f, resultadosEl));
+      } catch (e) {
+        mostrarStatus(statusEl, "erro", "Falha de conexão: " + e.message);
+      }
+    }
+
+    function renderResultado(fonte, container) {
+      const div = document.createElement("div");
+      div.className = "result-item";
+      const badgeClass = fonte.ativo ? "badge-ativo" : "badge-inativo";
+      const badgeTexto = fonte.ativo ? "ATIVA" : "INATIVA";
+
+      div.innerHTML = `
+        <div class="result-nome">${fonte.nome} <span class="badge ${badgeClass}">${badgeTexto}</span></div>
+        <div class="result-meta">ID ${fonte.id} · ${fonte.url || fonte.rss_url || "sem URL"}</div>
+        <button class="btn-danger" ${!fonte.ativo ? "disabled" : ""} data-id="${fonte.id}" data-nome="${fonte.nome}">
+          ${fonte.ativo ? "Desativar esta fonte" : "Já está inativa"}
+        </button>
+        <div class="acao-status"></div>
+      `;
+
+      const btn = div.querySelector("button");
+      const acaoStatusEl = div.querySelector(".acao-status");
+      if (fonte.ativo) {
+        btn.addEventListener("click", () => confirmarDesativacao(fonte, btn, acaoStatusEl));
+      }
+      container.appendChild(div);
+    }
+
+    async function confirmarDesativacao(fonte, btn, statusEl) {
+      const confirmado = confirm(`Desativar "${fonte.nome}" (ID ${fonte.id})?\n\nIsso só marca ativo=false — não apaga a fonte nem o histórico de notícias já publicadas.`);
+      if (!confirmado) return;
+
+      const secret = pegarSecret();
+      if (!secret) return;
+
+      btn.disabled = true;
+      btn.textContent = "Desativando...";
+      statusEl.innerHTML = "";
+
+      try {
+        const res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(secret)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: fonte.id, ativo: false })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          statusEl.innerHTML = `<div class="status-msg status-erro">Erro: ${data.error || res.status}</div>`;
+          btn.disabled = false;
+          btn.textContent = "Desativar esta fonte";
+          return;
+        }
+
+        statusEl.innerHTML = `<div class="status-msg status-ok">Fonte desativada com sucesso.</div>`;
+        btn.textContent = "Já está inativa";
+      } catch (e) {
+        statusEl.innerHTML = `<div class="status-msg status-erro">Falha de conexão: ${e.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = "Desativar esta fonte";
+      }
+    }
+
+    document.getElementById("btnBuscar").addEventListener("click", buscar);
+    document.getElementById("busca").addEventListener("keydown", e => {
+      if (e.key === "Enter") buscar();
+    });
+  </script>
+
+</body>
+</html>
