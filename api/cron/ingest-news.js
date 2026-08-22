@@ -26,6 +26,7 @@
 // sem depender da retenção curta de logs do Vercel (plano Hobby).
 
 import { XMLParser } from "fast-xml-parser";
+import { extractImageFromRssItem } from "../../src/lib/imageExtraction.js";
 import { recoverImage, getFallbackImage, resetStats, getStatsResumo } from "../../src/lib/imageRecovery.js";
 
 // ─── Proteção contra timeout (Vercel Hobby) ────────────────────────────────
@@ -179,22 +180,8 @@ function limparHtml(raw) {
 }
 
 // ─── Extração de imagem (Etapa 1 do módulo de recuperação) ─────────────────
-function extrairImagem(item) {
-  const enc = item.enclosure;
-  if (enc) {
-    const e = Array.isArray(enc) ? enc[0] : enc;
-    if (e?.["@_url"]) return e["@_url"];
-  }
-  for (const tag of ["media:content", "media:thumbnail"]) {
-    const m = item[tag];
-    if (m) {
-      const v = Array.isArray(m) ? m[0] : m;
-      if (v?.["@_url"]) return v["@_url"];
-    }
-  }
-  const html = item["content:encoded"] || item.description || "";
-  const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
-  return match ? match[1] : null;
+function extrairImagem(item, baseUrl) {
+  return extractImageFromRssItem(item, baseUrl);
 }
 
 // ─── Classificação de categoria ────────────────────────────────────────────
@@ -493,7 +480,7 @@ async function upsertNoticias(items, fonte, limite) {
       regiao:          loc ? loc.regiao : regiaoFallback(fonte.regiao),
       cidade:          loc ? loc.cidade : null,
       categoria:       classificarCategoria(titulo, resumo),
-      imagem_url:      extrairImagem(item),
+      imagem_url:      extrairImagem(item, fonte.rss_url || fonte.url),
       imagem_origem:   null,
       imagem_pendente: false,
       tentativas_recuperacao: 0,
