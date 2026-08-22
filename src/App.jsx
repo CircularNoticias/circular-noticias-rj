@@ -178,7 +178,7 @@ function NewsCard({ news }) {
       onMouseLeave={e => { e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.07)"; }}>
       {showImg && (
         <div style={{ width:"100%", height:140, position:"relative", background:"#e2e8f0", flexShrink:0 }}>
-          <img src={news.image} alt={news.headline} onError={() => setImgErr(true)} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
+          <img src={news.image} alt={news.headline} onError={() => setImgErr(true)} referrerPolicy="no-referrer" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
           <div style={{ position:"absolute", bottom:0, left:0, height:4, width:"100%", background:color }}/>
           {news.isOficial && (
             <div style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.6)", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:8 }}>
