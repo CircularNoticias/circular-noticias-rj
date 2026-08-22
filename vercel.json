@@ -6,6 +6,6 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|adicionar-fonte.html|remover-fonte.html).*)", "destination": "/index.html" }
   ]
 }
