@@ -1,5 +1,6 @@
 // src/lib/imageRecovery.js
-//
+import { extractImageFromHtml, isImageUrlValid } from "./imageExtraction.js";
+
 // Módulo único e centralizado de recuperação inteligente de imagens.
 // Ordem: RSS -> Open Graph -> primeira imagem do conteúdo -> fallback por categoria.
 // Nenhuma fonte tem lógica própria — tudo passa por recoverImage(noticia).
@@ -69,10 +70,7 @@ export function getStatsResumo() {
 
 // ─── Validação simples ──────────────────────────────────────────────────────
 function isImagemValida(url) {
-  if (!url || typeof url !== "string") return false;
-  if (!/^https?:\/\//i.test(url)) return false;
-  if (/\.svg(\?|$)/i.test(url)) return false;
-  return true;
+  return isImageUrlValid(url);
 }
 
 // ─── Etapa 1: RSS (já extraído em ingest-news.js, aqui só validamos) ───────
@@ -84,40 +82,13 @@ function tentarRss(noticia) {
 }
 
 // ─── Etapa 2: Open Graph ────────────────────────────────────────────────────
-function extrairOgImage(html) {
-  const m =
-    html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
-    html.match(/<meta[^>]+name=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']og:image["']/i);
-  return m ? m[1] : null;
+function extrairOgImage(html, baseUrl) {
+  return extractImageFromHtml(html, baseUrl);
 }
 
 // ─── Etapa 3: primeira imagem relevante do conteúdo ────────────────────────
-const IGNORAR_PADROES = [
-  /logo/i, /banner/i, /icon/i, /sprite/i, /avatar/i,
-  /placeholder/i, /ads?[-_.]/i, /publicidade/i, /pixel/i,
-];
-
-function extrairPrimeiraImagemConteudo(html) {
-  const imgs = [...html.matchAll(/<img\b[^>]*>/gi)].map(m => m[0]);
-  for (const tag of imgs) {
-    const srcMatch = tag.match(/\bsrc=["']([^"']+)["']/i);
-    if (!srcMatch) continue;
-    const src = srcMatch[1];
-
-    if (src.startsWith("data:")) continue;
-    if (/\.svg(\?|$)/i.test(src)) continue;
-    if (IGNORAR_PADROES.some(re => re.test(src))) continue;
-
-    const wMatch = tag.match(/\bwidth=["']?(\d+)/i);
-    const hMatch = tag.match(/\bheight=["']?(\d+)/i);
-    if (wMatch && Number(wMatch[1]) < 250) continue;
-    if (hMatch && Number(hMatch[1]) < 150) continue;
-
-    return src;
-  }
-  return null;
+function extrairPrimeiraImagemConteudo(html, baseUrl) {
+  return extractImageFromHtml(html, baseUrl);
 }
 
 async function buscarHtmlDaNoticia(url, timeoutMs = 6000) {
@@ -172,14 +143,14 @@ export async function recoverImage(noticia) {
     return aplicarFallback(noticia);
   }
 
-  const og = extrairOgImage(html);
+  const og = extrairOgImage(html, noticia.url_original);
   if (isImagemValida(og)) {
     stats.og++; stats.total++;
     console.log(`[imageRecovery] OG | ${ctx.fonte} | ${ctx.titulo} | ${Date.now() - inicio}ms`);
     return { imagem_url: og, imagem_origem: "og" };
   }
 
-  const doConteudo = extrairPrimeiraImagemConteudo(html);
+  const doConteudo = extrairPrimeiraImagemConteudo(html, noticia.url_original);
   if (isImagemValida(doConteudo)) {
     stats.conteudo++; stats.total++;
     console.log(`[imageRecovery] CONTEUDO | ${ctx.fonte} | ${ctx.titulo} | ${Date.now() - inicio}ms`);
@@ -189,4 +160,5 @@ export async function recoverImage(noticia) {
   stats.fallback++; stats.total++;
   console.log(`[imageRecovery] FALLBACK | ${ctx.fonte} | ${ctx.titulo} | ${Date.now() - inicio}ms`);
   return aplicarFallback(noticia);
-  }
+    }
+  
