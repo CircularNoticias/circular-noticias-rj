@@ -125,6 +125,16 @@ function formatDateTime(iso) {
   };
 }
 
+function normalizeImageUrl(value) {
+  if (!value || typeof value !== "string") return null;
+  const decoded = value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .trim();
+  return /^https?:\/\//i.test(decoded) ? decoded : null;
+}
+
 function mapRow(row) {
   const { date, time } = formatDateTime(row.created_at);
   return {
@@ -136,7 +146,7 @@ function mapRow(row) {
     summary:   stripHtml(row.resumo),
     source:    row.fonte_nome || "",
     sourceUrl: row.url_original || "",
-    image:     row.imagem_origem === "fallback" ? null : (row.imagem_url || null),
+    image:     row.imagem_origem === "fallback" ? null : normalizeImageUrl(row.imagem_url),
     isOficial: FONTES_OFICIAIS.has(row.fonte_nome),
     isGenerica: FONTES_GENERICAS.has(row.fonte_nome),
     date, time,
@@ -178,7 +188,7 @@ function NewsCard({ news }) {
       onMouseLeave={e => { e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.07)"; }}>
       {showImg && (
         <div style={{ width:"100%", height:140, position:"relative", background:"#e2e8f0", flexShrink:0 }}>
-          <img src={news.image} alt={news.headline} onError={() => setImgErr(true)} referrerPolicy="no-referrer" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
+          <img src={news.image} alt={news.headline} onError={() => setImgErr(true)} onLoad={e => { if (e.currentTarget.naturalWidth < 20 || e.currentTarget.naturalHeight < 20) setImgErr(true); }} referrerPolicy="no-referrer" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
           <div style={{ position:"absolute", bottom:0, left:0, height:4, width:"100%", background:color }}/>
           {news.isOficial && (
             <div style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.6)", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:8 }}>
