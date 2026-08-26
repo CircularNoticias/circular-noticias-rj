@@ -11,6 +11,38 @@ const IGNORE_IMAGE_PATTERNS = [
   /tracking/i,
 ];
 
+// TLDs compostos comuns (pra calcular o "domínio registrável" corretamente).
+// Sem essa lista, "noticias.com.br" e "outracoisa.com.br" pareceriam o mesmo
+// domínio só por causa do ".com.br" — o corte tem que ser antes disso.
+const MULTI_PART_TLDS = new Set([
+  "com.br", "net.br", "org.br", "gov.br", "edu.br", "blog.br", "adv.br", "mil.br",
+  "co.uk", "org.uk", "gov.uk",
+]);
+
+function registrableDomain(hostname) {
+  const parts = String(hostname || "").toLowerCase().split(".").filter(Boolean);
+  if (parts.length <= 2) return parts.join(".");
+  const lastTwo = parts.slice(-2).join(".");
+  const lastThree = parts.slice(-3).join(".");
+  return MULTI_PART_TLDS.has(lastTwo) ? lastThree : lastTwo;
+}
+
+// Compara se uma URL de imagem pertence ao mesmo site da fonte (mesmo domínio
+// registrável). Usado para descartar imagens de terceiros (redes de anúncio,
+// banners de agências/parceiros) que aparecem embutidas no content:encoded do
+// RSS mas não fazem parte do conteúdo editorial real da notícia.
+function isSameSite(candidateUrl, baseUrl) {
+  try {
+    const candidateHost = new URL(candidateUrl).hostname;
+    const baseHost = new URL(baseUrl).hostname;
+    return registrableDomain(candidateHost) === registrableDomain(baseHost);
+  } catch {
+    // Se não der pra comparar (baseUrl ausente/inválida), não bloqueia —
+    // preferimos deixar passar a quebrar a extração por excesso de cautela.
+    return true;
+  }
+}
+
 function decodeHtml(value) {
   return String(value || "")
     .replace(/&amp;/gi, "&")
@@ -62,7 +94,15 @@ export function extractImageFromRssItem(item, baseUrl) {
     if (isImageUrlValid(resolved)) return resolved;
   }
   const html = item?.["content:encoded"] || item?.description || "";
-  return extractImageFromHtml(String(html), baseUrl);
+  // restrictImgToBaseDomain: true — imagens soltas dentro do content:encoded
+  // (fora de enclosure/media:content, que são campos estruturados do RSS)
+  // só são aceitas se pertencerem ao mesmo domínio da fonte. Isso evita que
+  // banners de anúncio/parceiros injetados no feed (comuns em plugins de
+  // monetização de RSS) sejam capturados como se fossem a foto da notícia.
+  // Quando isso acontece, extractImageFromRssItem retorna null e o
+  // imageRecovery.js assume na sequência, buscando o og:image real da
+  // página do artigo.
+  return extractImageFromHtml(String(html), baseUrl, { restrictImgToBaseDomain: true });
 }
 
 function metaContent(html, names) {
@@ -122,7 +162,9 @@ function extractJsonLdImage(html) {
   return null;
 }
 
-export function extractImageFromHtml(html, baseUrl) {
+export function extractImageFromHtml(html, baseUrl, options = {}) {
+  const { restrictImgToBaseDomain = false } = options;
+
   const candidates = [
     metaContent(html, ["og:image", "og:image:url", "og:image:secure_url"]),
     metaContent(html, ["twitter:image", "twitter:image:src"]),
@@ -141,6 +183,7 @@ export function extractImageFromHtml(html, baseUrl) {
     const resolved = resolveImageUrl(candidate, baseUrl);
     if (!isImageUrlValid(resolved)) continue;
     if (IGNORE_IMAGE_PATTERNS.some(pattern => pattern.test(resolved))) continue;
+    if (restrictImgToBaseDomain && baseUrl && !isSameSite(resolved, baseUrl)) continue;
     const width = Number.parseInt((tag.match(/\bwidth=['"]?(\d+)/i) || [])[1] || "0", 10);
     const height = Number.parseInt((tag.match(/\bheight=['"]?(\d+)/i) || [])[1] || "0", 10);
     if (width && width < 250) continue;
@@ -149,4 +192,4 @@ export function extractImageFromHtml(html, baseUrl) {
   }
   return null;
 }
-    
+  
