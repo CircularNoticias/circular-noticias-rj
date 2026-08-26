@@ -48,7 +48,19 @@ export function getPrioridadeAtual() {
 // Organiza o pool por categoria (prioridade rotativa) e dentro de cada
 // categoria garante diversidade de fontes (1 por fonte).
 // O leitor vê um fluxo contínuo — sem títulos nem rótulos de categoria.
-export function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxPorFontePorPagina = 4, maxGenericasPorPagina = 1) {
+//
+// maxTotalPorFonte: cota MÁXIMA que uma mesma fonte pode ocupar no feed
+// curado INTEIRO (não só dentro de um bloco de itemsPerPage). Diferente das
+// outras regras, essa nunca é relaxada pela cascata — é o teto que garante
+// diversidade de verdade quando o pool tem fontes muito desiguais em volume
+// (poucos portais grandes publicando muito mais que as fontes regionais no
+// mesmo intervalo de tempo). Sem esse teto, assim que as fontes pequenas
+// esgotam seu estoque de itens recentes, só sobram os portais grandes pra
+// preencher o resto do feed — daí a predominância que aparecia do meio pro
+// final. O excedente que não entra nessa leva não é descartado do banco,
+// só fica de fora desta seleção — reaparece naturalmente na próxima
+// atualização, quando a janela de itens recentes se renovar.
+export function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxPorFontePorPagina = 4, maxGenericasPorPagina = 1, maxTotalPorFonte = 10) {
   const prioridade = getPrioridadeAtual();
 
   // 1) Agrupar por categoria, mantendo a ordem cronológica dentro do grupo
@@ -74,7 +86,9 @@ export function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxP
     idx++;
   }
 
-  // 3) Seleção final, item por item, respeitando TRÊS regras ao mesmo tempo:
+  // 3) Seleção final, item por item, respeitando QUATRO regras ao mesmo tempo:
+  //    - cota total por fonte no feed inteiro (regra rígida — ver comentário
+  //      acima; verificada ANTES de qualquer outra e nunca relaxada);
   //    - cooldown por fonte (nunca a mesma fonte antes de MIN_GAP posições);
   //    - limite de oficiais por bloco de página (nunca mais que maxOficiais
   //      oficiais dentro de um mesmo bloco de itemsPerPage);
@@ -94,12 +108,12 @@ export function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxP
 
   const resultado = [];
   const liberaEm = new Map();
+  const contagemTotal = new Map();
   let posicao = 0;
   let ponteiro = 0; // avança em rodízio — dá a MESMA prioridade pra fonte
                     // grande e pequena, em vez de sempre preferir quem tem
                     // mais itens (o que empurrava prefeituras e fontes
                     // pequenas pra páginas muito distantes).
-  const totalItens = intercalado.length;
 
   const escolherFonte = ({ respeitarOficiais, respeitarCooldown, respeitarMaxPorFonte, respeitarGenericas }) => {
     const inicioBloco = Math.floor(posicao / itemsPerPage) * itemsPerPage;
@@ -116,6 +130,8 @@ export function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxP
       const fonte = fontes[i];
       const fila = porFonte.get(fonte);
       if (fila.length === 0) continue;
+      // Cota total — regra rígida, checada antes de tudo, nunca relaxada.
+      if ((contagemTotal.get(fonte) ?? 0) >= maxTotalPorFonte) continue;
       if (respeitarCooldown && (liberaEm.get(fonte) ?? 0) > posicao) continue;
       if (respeitarOficiais && fila[0].isOficial && oficiaisNoBloco >= maxOficiais) continue;
       if (respeitarGenericas && fila[0].isGenerica && genericasNoBloco >= maxGenericasPorPagina) continue;
@@ -129,22 +145,30 @@ export function curarFeedCompleto(pool, itemsPerPage = 32, maxOficiais = 4, maxP
     return null;
   };
 
-  while (resultado.length < totalItens) {
+  while (true) {
     // Tenta respeitando todas as regras; se não achar candidato, relaxa em
-    // cascata, pra nunca travar e nunca descartar notícia. O limite de
-    // genéricas é o ÚLTIMO a ser relaxado — só permite genérica se
-    // literalmente não sobrar mais nenhuma fonte regional disponível.
+    // cascata, pra nunca travar. O limite de genéricas é o ÚLTIMO a ser
+    // relaxado — só permite genérica se literalmente não sobrar mais
+    // nenhuma fonte regional disponível. A cota total por fonte NUNCA é
+    // relaxada — está embutida em escolherFonte antes de qualquer flag.
     let fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true, respeitarMaxPorFonte: true, respeitarGenericas: true });
     if (fonte === null) fonte = escolherFonte({ respeitarOficiais: true, respeitarCooldown: true, respeitarMaxPorFonte: false, respeitarGenericas: true });
     if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: true, respeitarMaxPorFonte: false, respeitarGenericas: true });
     if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: false, respeitarMaxPorFonte: false, respeitarGenericas: true });
     if (fonte === null) fonte = escolherFonte({ respeitarOficiais: false, respeitarCooldown: false, respeitarMaxPorFonte: false, respeitarGenericas: false });
 
+    // Nenhuma fonte disponível — ou todas esgotaram o estoque, ou todas
+    // bateram na cota total. O que sobrar no pool fica de fora desta
+    // seleção (não é descartado do banco, só não entra nesta leva).
+    if (fonte === null) break;
+
     const item = porFonte.get(fonte).shift();
     resultado.push(item);
+    contagemTotal.set(fonte, (contagemTotal.get(fonte) ?? 0) + 1);
     liberaEm.set(fonte, posicao + MIN_GAP);
     posicao++;
   }
 
   return resultado;
 }
+    
