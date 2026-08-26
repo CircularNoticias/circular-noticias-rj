@@ -373,7 +373,18 @@ function parseRssItems(xml) {
 // Tratamento especial por fonte, se o genérico não funcionar bem para ela.
 // Basta adicionar uma função aqui e registrá-la no objeto abaixo.
 const SCRAPERS_ESPECIAIS = {
-  // "Nome Exato da Fonte": minhaFuncaoEspecial,
+  // O scraping genérico aceita qualquer link do mesmo domínio encontrado na
+  // página — na home do R7 Rio de Janeiro isso incluía links de barra
+  // lateral/rodapé para a seção Prisma (blogs/colunistas), que não são
+  // notícia da editoria Rio de Janeiro. Este scraper reaproveita a mesma
+  // lógica genérica, só restringindo os links a /rio-de-janeiro/ e
+  // descartando /prisma/ e vídeos.
+  "R7 Rio de Janeiro": (fonte, limite) => scrapeFonteGenerica(
+    normalizarUrl(fonte.url),
+    fonte.nome,
+    limite,
+    path => path.startsWith("/rio-de-janeiro/") && !path.includes("/prisma/") && !path.includes("/video/")
+  ),
 };
 
 function extrairMetaTag(html, prop) {
@@ -401,7 +412,7 @@ function extrairMetadadosPagina(html) {
   };
 }
 
-function extrairLinksNoticias(html, baseUrl) {
+function extrairLinksNoticias(html, baseUrl, filtroPath = null) {
   const host = new URL(baseUrl).origin;
   const links = new Set();
   const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>/gi;
@@ -417,12 +428,16 @@ function extrairLinksNoticias(html, baseUrl) {
     if (semQuery === "/" || semQuery.length < 12) continue;
     if (/\.(jpg|jpeg|png|gif|css|js|pdf|xml)$/i.test(semQuery)) continue;
     if ((semQuery.match(/-/g) || []).length < 2) continue;
+    // filtroPath: usado por scrapers especiais para restringir a uma
+    // editoria específica (ex: só /rio-de-janeiro/, rejeitando /prisma/,
+    // blogs e outras seções que aparecem como link na mesma página).
+    if (filtroPath && !filtroPath(semQuery)) continue;
     links.add(href.split("#")[0]);
   }
   return [...links];
 }
 
-async function scrapeFonteGenerica(url, nomeFonte, limite = 10) {
+async function scrapeFonteGenerica(url, nomeFonte, limite = 10, filtroPath = null) {
   const inicio = Date.now();
   const headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -434,7 +449,7 @@ async function scrapeFonteGenerica(url, nomeFonte, limite = 10) {
   if (!homeRes.ok) return { items: [], ms: Date.now() - inicio };
   const homeHtml = await homeRes.text();
 
-  const candidatos = extrairLinksNoticias(homeHtml, url).slice(0, limite);
+  const candidatos = extrairLinksNoticias(homeHtml, url, filtroPath).slice(0, limite);
 
    const items = [];
   for (const link of candidatos) {
@@ -462,6 +477,7 @@ async function scrapeFonte(fonte, limite) {
   if (especial) return especial(fonte, limite);
   return scrapeFonteGenerica(normalizarUrl(fonte.url), fonte.nome, limite);
 }
+
 
 // ─── Inserção de notícias (com recuperação de imagem + fila de pendentes) ──
 async function upsertNoticias(items, fonte, limite) {
@@ -828,4 +844,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
-  
+        
