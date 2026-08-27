@@ -437,7 +437,7 @@ function extrairLinksNoticias(html, baseUrl, filtroPath = null) {
   return [...links];
 }
 
-async function scrapeFonteGenerica(url, nomeFonte, limite = 10, filtroPath = null) {
+async function scrapeFonteGenerica(url, nomeFonte, limite = 10, filtroPath = null, filtroConteudo = null) {
   const inicio = Date.now();
   const headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -449,16 +449,22 @@ async function scrapeFonteGenerica(url, nomeFonte, limite = 10, filtroPath = nul
   if (!homeRes.ok) return { items: [], ms: Date.now() - inicio };
   const homeHtml = await homeRes.text();
 
-  const candidatos = extrairLinksNoticias(homeHtml, url, filtroPath).slice(0, limite);
+  // Busca uma folga extra de candidatos (2x o limite) porque o filtroConteudo
+  // só é aplicado DEPOIS de abrir cada página — sem essa folga, se os
+  // primeiros da lista forem descartados (ex: páginas de categoria/hub), o
+  // lote final viria menor que o limite sem necessidade.
+  const candidatos = extrairLinksNoticias(homeHtml, url, filtroPath).slice(0, limite * 2);
 
-   const items = [];
+  const items = [];
   for (const link of candidatos) {
+    if (items.length >= limite) break;
     try {
       const res = await fetch(link, { signal: AbortSignal.timeout(10000), headers });
       if (!res.ok) continue;
       const html = await res.text();
       const { titulo, descricao, imagem } = extrairMetadadosPagina(html);
       if (!titulo) continue;
+      if (filtroConteudo && !filtroConteudo(titulo, descricao)) continue;
       items.push({
         title: titulo,
         description: descricao,
