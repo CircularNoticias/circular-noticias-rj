@@ -372,18 +372,37 @@ function parseRssItems(xml) {
 // ─── Scraping genérico (substitui o rssgenfix morto) ───────────────────────
 // Tratamento especial por fonte, se o genérico não funcionar bem para ela.
 // Basta adicionar uma função aqui e registrá-la no objeto abaixo.
+// Textos padrão que o R7 usa em TODA página de categoria/subseção/hub (ex:
+// "Interior RJ", "Zona Sul", "Grande Rio") — nunca aparecem numa manchete de
+// notícia de verdade, então servem de sinal confiável independente da URL.
+const R7_TEXTO_CATEGORIA = /notícias,\s*fotos e vídeos sobre/i;
+
 const SCRAPERS_ESPECIAIS = {
   // O scraping genérico aceita qualquer link do mesmo domínio encontrado na
   // página — na home do R7 Rio de Janeiro isso incluía links de barra
-  // lateral/rodapé para a seção Prisma (blogs/colunistas), que não são
-  // notícia da editoria Rio de Janeiro. Este scraper reaproveita a mesma
-  // lógica genérica, só restringindo os links a /rio-de-janeiro/ e
-  // descartando /prisma/ e vídeos.
+  // lateral/rodapé para a seção Prisma (blogs/colunistas) e para páginas de
+  // categoria/subseção (ex: "Interior RJ"), que não são notícia da editoria
+  // Rio de Janeiro. Este scraper reaproveita a mesma lógica genérica, com
+  // dois filtros:
+  //   1. path: só /rio-de-janeiro/, descarta /prisma/ e /video/, e exige que
+  //      o último segmento do link seja um slug longo (manchete de verdade
+  //      tende a ser uma frase inteira em kebab-case; páginas de categoria
+  //      como "interior-rj" são curtas e com poucos hífens).
+  //   2. conteúdo: descarta se o título/descrição da página bater com o
+  //      texto padrão de categoria do R7 (ver R7_TEXTO_CATEGORIA acima) —
+  //      pega o caso mesmo se algum path escapar do filtro 1.
   "R7 Rio de Janeiro": (fonte, limite) => scrapeFonteGenerica(
     normalizarUrl(fonte.url),
     fonte.nome,
     limite,
-    path => path.startsWith("/rio-de-janeiro/") && !path.includes("/prisma/") && !path.includes("/video/")
+    (path) => {
+      if (!path.startsWith("/rio-de-janeiro/")) return false;
+      if (path.includes("/prisma/") || path.includes("/video/")) return false;
+      const ultimoSegmento = path.split("/").filter(Boolean).pop() || "";
+      const hifens = (ultimoSegmento.match(/-/g) || []).length;
+      return ultimoSegmento.length >= 25 && hifens >= 3;
+    },
+    (titulo, descricao) => !R7_TEXTO_CATEGORIA.test(`${titulo} ${descricao}`)
   ),
 };
 
