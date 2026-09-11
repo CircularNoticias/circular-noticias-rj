@@ -111,6 +111,14 @@ const CITY_TO_REGION = {
   "Vassouras":"centro-sul","Valença":"centro-sul","Miguel Pereira":"centro-sul",
 };
 
+// Cidades agrupadas por região, derivado automaticamente do mapa acima —
+// usado para exibir os chips de cidade em qualquer região selecionada.
+const CITIES_BY_REGION = Object.entries(CITY_TO_REGION).reduce((acc, [city, region]) => {
+  if (!acc[region]) acc[region] = [];
+  acc[region].push(city);
+  return acc;
+}, {});
+
 function normalizeRegiao(r) {
   if (!r) return null;
   if (VALID_REGION_IDS.includes(r)) return r;
@@ -518,18 +526,11 @@ Responda APENAS com JSON válido, sem markdown.`,
           </div>
         ) : (
           <>
-            {activeRegion === "lagos" && (
+    
+            {activeRegion !== "todos" && CITIES_BY_REGION[activeRegion]?.length > 0 && (
               <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:12, scrollbarWidth:"none" }}>
-                {LAGOS_CITIES.map(c => (
+                {CITIES_BY_REGION[activeRegion].map(c => (
                   <span key={c} style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap" }}>📍 {c}</span>
-                ))}
-              </div>
-            )}
-
-            {activeRegion === "baixada" && (
-              <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:12, scrollbarWidth:"none" }}>
-                {BAIXADA_CITIES.map(c => (
-                  <span key={c} style={{ background:"#fce7f3", color:"#9d174d", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap" }}>📍 {c}</span>
                 ))}
               </div>
             )}
