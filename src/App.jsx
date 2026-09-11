@@ -1,27 +1,43 @@
 import { useState, useEffect, useMemo } from "react";
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate, Link } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 import { AdminLogin, AdminDashboard, RequireAuth } from "./admin/Admin.jsx";
 import { AdminInsights } from "./admin/Insights.jsx";
 import { FONTES_OFICIAIS, FONTES_GENERICAS, curarFeedCompleto } from "./lib/curadoria.js";
+import { Logo } from "./components/Logo.jsx";
+import Publicidade from "./pages/Publicidade.jsx";
+import DivulgueSuaEmpresa from "./pages/DivulgueSuaEmpresa.jsx";
+import QuemSomos from "./pages/QuemSomos.jsx";
+import TermosDeUso from "./pages/TermosDeUso.jsx";
+import Privacidade from "./pages/Privacidade.jsx";
+import Contato from "./pages/Contato.jsx";
 
 // ─── Paginação ──────────────────────────────────────────────────────────────
 const ITEMS_PER_PAGE = 24; // notícias por página a partir da página 2
 
 const REGIONS = [
-  { id: "todos",         label: "Todo o Estado" },
+  { id: "todos", label: "Todo o Estado" },
   { id: "metropolitana", label: "Região Metropolitana" },
-  { id: "baixada",       label: "Baixada Fluminense" },
-  { id: "lagos",         label: "Região dos Lagos" },
-  { id: "serrana",       label: "Região Serrana" },
-  { id: "norte",         label: "Norte Fluminense" },
-  { id: "noroeste",      label: "Noroeste Fluminense" },
-  { id: "costa-verde",   label: "Costa Verde" },
+  { id: "baixada", label: "Baixada Fluminense" },
+  { id: "lagos", label: "Região dos Lagos" },
+  { id: "serrana", label: "Região Serrana" },
+  { id: "norte", label: "Norte Fluminense" },
+  { id: "noroeste", label: "Noroeste Fluminense" },
+  { id: "costa-verde", label: "Costa Verde" },
   { id: "medio-paraiba", label: "Médio Paraíba" },
-  { id: "centro-sul",    label: "Centro-Sul Fluminense" },
+  { id: "centro-sul", label: "Centro-Sul Fluminense" },
 ];
 
 const VALID_REGION_IDS = REGIONS.map(r => r.id).filter(id => id !== "todos");
+
+const FOOTER_LINKS = [
+  { to: "/quem-somos", label: "Quem Somos" },
+  { to: "/publicidade", label: "Publicidade" },
+  { to: "/divulgue-sua-empresa", label: "Divulgue sua Empresa" },
+  { to: "/termos-de-uso", label: "Termos de Uso" },
+  { to: "/privacidade", label: "Privacidade" },
+  { to: "/contato", label: "Contato" },
+];
 
 const LAGOS_CITIES = [
   "Cabo Frio","Arraial do Cabo","Armação dos Búzios",
@@ -42,17 +58,17 @@ const categoryColors = {
 };
 
 const categoryGradients = {
-  "Segurança":    "linear-gradient(135deg,#7c2d12,#ea580c)",
-  "Política":     "linear-gradient(135deg,#3b0764,#7c3aed)",
-  "Saúde":        "linear-gradient(135deg,#881337,#f43f5e)",
-  "Esportes":     "linear-gradient(135deg,#064e3b,#10b981)",
-  "Economia":     "linear-gradient(135deg,#713f12,#eab308)",
-  "Educação":     "linear-gradient(135deg,#0c4a6e,#06b6d4)",
-  "Cultura":      "linear-gradient(135deg,#831843,#ec4899)",
-  "Turismo":      "linear-gradient(135deg,#0c4a6e,#0ea5e9)",
+  "Segurança": "linear-gradient(135deg,#7c2d12,#ea580c)",
+  "Política": "linear-gradient(135deg,#3b0764,#7c3aed)",
+  "Saúde": "linear-gradient(135deg,#881337,#f43f5e)",
+  "Esportes": "linear-gradient(135deg,#064e3b,#10b981)",
+  "Economia": "linear-gradient(135deg,#713f12,#eab308)",
+  "Educação": "linear-gradient(135deg,#0c4a6e,#06b6d4)",
+  "Cultura": "linear-gradient(135deg,#831843,#ec4899)",
+  "Turismo": "linear-gradient(135deg,#0c4a6e,#0ea5e9)",
   "Meio Ambiente":"linear-gradient(135deg,#14532d,#22c55e)",
-  "Tecnologia":   "linear-gradient(135deg,#1e1b4b,#6366f1)",
-  "Geral":        "linear-gradient(135deg,#0f172a,#1e3a5f)",
+  "Tecnologia": "linear-gradient(135deg,#1e1b4b,#6366f1)",
+  "Geral": "linear-gradient(135deg,#0f172a,#1e3a5f)",
 };
 
 const categoryIcons = {
@@ -67,23 +83,31 @@ const CITY_TO_REGION = {
   "São Gonçalo":"metropolitana","Itaboraí":"metropolitana",
   "Maricá":"metropolitana","Magé":"metropolitana",
   "Guapimirim":"metropolitana","Rio Bonito":"metropolitana",
+
   "Nova Iguaçu":"baixada","Duque de Caxias":"baixada",
   "Belford Roxo":"baixada","Nilópolis":"baixada",
   "Mesquita":"baixada","Queimados":"baixada",
   "São João de Meriti":"baixada","Japeri":"baixada",
   "Seropédica":"baixada","Itaguaí":"baixada","Paracambi":"baixada",
+
   "Cabo Frio":"lagos","Arraial do Cabo":"lagos","Armação dos Búzios":"lagos",
   "Búzios":"lagos","São Pedro da Aldeia":"lagos","Araruama":"lagos",
   "Saquarema":"lagos","Iguaba Grande":"lagos","Casimiro de Abreu":"lagos",
+
   "Petrópolis":"serrana","Teresópolis":"serrana","Nova Friburgo":"serrana",
   "Cachoeiras de Macacu":"serrana","Cordeiro":"serrana","Bom Jardim":"serrana",
+
   "Campos dos Goytacazes":"norte","Macaé":"norte",
   "São João da Barra":"norte","Quissamã":"norte","Carapebus":"norte",
+
   "Itaperuna":"noroeste","Santo Antônio de Pádua":"noroeste",
   "Miracema":"noroeste","Natividade":"noroeste",
+
   "Angra dos Reis":"costa-verde","Paraty":"costa-verde","Mangaratiba":"costa-verde",
+
   "Volta Redonda":"medio-paraiba","Barra Mansa":"medio-paraiba",
   "Resende":"medio-paraiba","Barra do Piraí":"medio-paraiba","Itatiaia":"medio-paraiba",
+
   "Vassouras":"centro-sul","Valença":"centro-sul","Miguel Pereira":"centro-sul",
 };
 
@@ -91,11 +115,11 @@ function normalizeRegiao(r) {
   if (!r) return null;
   if (VALID_REGION_IDS.includes(r)) return r;
   const s = r.toLowerCase();
-  if (s.includes("baixada"))    return "baixada";
-  if (s.includes("lagos"))      return "lagos";
-  if (s.includes("serrana"))    return "serrana";
-  if (s.includes("noroeste"))   return "noroeste";
-  if (s.includes("norte"))      return "norte";
+  if (s.includes("baixada")) return "baixada";
+  if (s.includes("lagos")) return "lagos";
+  if (s.includes("serrana")) return "serrana";
+  if (s.includes("noroeste")) return "noroeste";
+  if (s.includes("norte")) return "norte";
   if (s.includes("costa verde") || s.includes("costa-verde")) return "costa-verde";
   if (s.includes("paraíba") || s.includes("paraiba")) return "medio-paraiba";
   if (s.includes("centro-sul") || s.includes("centro sul")) return "centro-sul";
@@ -138,15 +162,15 @@ function normalizeImageUrl(value) {
 function mapRow(row) {
   const { date, time } = formatDateTime(row.created_at);
   return {
-    id:        row.id,
-    region:    resolveRegion(row),
-    city:      row.cidade || "",
-    category:  row.categoria || "Geral",
-    headline:  stripHtml(row.titulo),
-    summary:   stripHtml(row.resumo),
-    source:    row.fonte_nome || "",
+    id: row.id,
+    region: resolveRegion(row),
+    city: row.cidade || "",
+    category: row.categoria || "Geral",
+    headline: stripHtml(row.titulo),
+    summary: stripHtml(row.resumo),
+    source: row.fonte_nome || "",
     sourceUrl: row.url_original || "",
-    image:     row.imagem_origem === "fallback" ? null : normalizeImageUrl(row.imagem_url),
+    image: row.imagem_origem === "fallback" ? null : normalizeImageUrl(row.imagem_url),
     isOficial: FONTES_OFICIAIS.has(row.fonte_nome),
     isGenerica: FONTES_GENERICAS.has(row.fonte_nome),
     date, time,
@@ -154,32 +178,11 @@ function mapRow(row) {
 }
 
 // ─── Componentes ────────────────────────────────────────────────────────────
-function Logo({ size = 42 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <defs>
-        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#38bdf8"/>
-          <stop offset="100%" stopColor="#1d4ed8"/>
-        </linearGradient>
-      </defs>
-      <path d="M18 72 Q10 50 18 28" stroke="url(#lg)" strokeWidth="7" strokeLinecap="round" fill="none"/>
-      <path d="M28 65 Q22 50 28 35" stroke="url(#lg)" strokeWidth="6" strokeLinecap="round" fill="none" opacity="0.8"/>
-      <path d="M82 28 Q90 50 82 72" stroke="url(#lg)" strokeWidth="7" strokeLinecap="round" fill="none"/>
-      <path d="M72 35 Q78 50 72 65" stroke="url(#lg)" strokeWidth="6" strokeLinecap="round" fill="none" opacity="0.8"/>
-      <circle cx="50" cy="50" r="10" fill="url(#lg)"/>
-      <circle cx="50" cy="50" r="5" fill="#fff"/>
-      <line x1="37" y1="50" x2="63" y2="50" stroke="url(#lg)" strokeWidth="3" strokeLinecap="round" opacity="0.3"/>
-    </svg>
-  );
-}
-
 function NewsCard({ news }) {
-  const color  = categoryColors[news.category] || "#64748b";
+  const color = categoryColors[news.category] || "#64748b";
   const [imgErr, setImgErr] = useState(false);
   const showImg = news.image && !imgErr;
   const open = () => news.sourceUrl && window.open(news.sourceUrl, "_blank", "noopener,noreferrer");
-
   return (
     <div onClick={open} role="link" tabIndex={0}
       onKeyDown={e => e.key === "Enter" && open()}
@@ -217,7 +220,7 @@ function NewsCard({ news }) {
     </div>
   );
 }
-        
+
 // ─── Componente de Paginação ────────────────────────────────────────────────
 function Pagination({ currentPage, totalPages, onNavigate }) {
   if (totalPages <= 1) return null;
@@ -233,6 +236,7 @@ function Pagination({ currentPage, totalPages, onNavigate }) {
         range.push(i);
       }
     }
+
     for (const i of range) {
       if (last !== null) {
         if (i - last === 2) rangeWithDots.push(last + 1);
@@ -258,7 +262,6 @@ function Pagination({ currentPage, totalPages, onNavigate }) {
         style={{ ...btnBase, opacity: currentPage === 1 ? 0.4 : 1, cursor: currentPage === 1 ? "not-allowed" : "pointer" }}>
         « Anterior
       </button>
-
       {getPageNumbers().map((p, idx) =>
         p === "..." ? (
           <span key={`dots-${idx}`} style={{ padding: "0 4px", color: "#94a3b8", fontSize: 13 }}>...</span>
@@ -278,7 +281,6 @@ function Pagination({ currentPage, totalPages, onNavigate }) {
           </button>
         )
       )}
-
       <button
         onClick={() => onNavigate(currentPage + 1)}
         disabled={currentPage === totalPages}
@@ -290,18 +292,21 @@ function Pagination({ currentPage, totalPages, onNavigate }) {
   );
 }
 
-// ─── App: define a rota única (coringa) que cobre / e /pagina/:num ────────
-// Importante: usamos UMA ÚNICA <Route>, não duas. Se fossem duas rotas
-// separadas ("/" e "/pagina/:num"), o React Router desmontaria e remontaria
-// todo o componente a cada troca de página — resetando o estado e disparando
-// uma nova busca ao Supabase toda vez (causa da paginação "sumindo" e da
-// inconsistência entre buscas). Com uma rota coringa, o componente permanece
+// ─── App: define a rota única (coringa) que cobre /, /pagina/:num e /regiao/:slug ──
+// Importante: usamos UMA ÚNICA <Route> coringa para essas três variações, não rotas
+// separadas. Se fossem rotas separadas, o React Router desmontaria e remontaria
+// todo o componente a cada troca de página/região — resetando o estado e disparando
+// uma nova busca ao Supabase toda vez. Com uma rota coringa, o componente permanece
 // montado e os dados são buscados uma única vez por sessão.
 function PageWrapper() {
   const location = useLocation();
   const navigate = useNavigate();
-  const match = location.pathname.match(/^\/pagina\/(\d+)\/?$/);
-  const currentPage = match ? Math.max(1, parseInt(match[1], 10) || 1) : 1;
+
+  const pageMatch = location.pathname.match(/^\/pagina\/(\d+)\/?$/);
+  const regionMatch = location.pathname.match(/^\/regiao\/([a-z-]+)\/?$/);
+
+  const currentPage = pageMatch ? Math.max(1, parseInt(pageMatch[1], 10) || 1) : 1;
+  const regionFromUrl = regionMatch && VALID_REGION_IDS.includes(regionMatch[1]) ? regionMatch[1] : "todos";
 
   const goToPage = (p) => {
     if (p < 1) return;
@@ -309,7 +314,12 @@ function PageWrapper() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  return <AppContent currentPage={currentPage} goToPage={goToPage} />;
+  const goToRegion = (regionId) => {
+    navigate(regionId === "todos" ? "/" : `/regiao/${regionId}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return <AppContent currentPage={currentPage} goToPage={goToPage} regionFromUrl={regionFromUrl} goToRegion={goToRegion} />;
 }
 
 export default function App() {
@@ -318,21 +328,31 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
       <Route path="/admin/insights" element={<RequireAuth><AdminInsights /></RequireAuth>} />
+      <Route path="/publicidade" element={<Publicidade />} />
+      <Route path="/divulgue-sua-empresa" element={<DivulgueSuaEmpresa />} />
+      <Route path="/quem-somos" element={<QuemSomos />} />
+      <Route path="/termos-de-uso" element={<TermosDeUso />} />
+      <Route path="/privacidade" element={<Privacidade />} />
+      <Route path="/contato" element={<Contato />} />
       <Route path="/*" element={<PageWrapper />} />
     </Routes>
   );
 }
 
 // ─── Conteúdo principal ─────────────────────────────────────────────────────
-function AppContent({ currentPage, goToPage }) {
-  const [activeRegion,  setActiveRegion]  = useState("todos");
-  const [search,        setSearch]        = useState("");
-  const [searchQuery,   setSearchQuery]   = useState("");
+function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion }) {
+  const [activeRegion, setActiveRegion] = useState(regionFromUrl);
+  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
-  const [news,          setNews]          = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState(null);
+  const [news, setNews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setActiveRegion(regionFromUrl);
+  }, [regionFromUrl]);
 
   useEffect(() => {
     let mounted = true;
@@ -360,8 +380,6 @@ function AppContent({ currentPage, goToPage }) {
   const pool = activeRegion === "todos"
     ? news
     : news.filter(n => n.region === activeRegion);
-    
-  
 
   // ─── Paginação ──────────────────────────────────────────────────────────
   const paginacaoAtiva = activeRegion === "todos";
@@ -397,10 +415,12 @@ function AppContent({ currentPage, goToPage }) {
         );
 
   useEffect(() => {
-    document.title = currentPage === 1
+    const regionLabelForTitle = REGIONS.find(r => r.id === activeRegion)?.label;
+    const base = activeRegion === "todos"
       ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
-      : `Circular Notícias RJ — Página ${currentPage}`;
-  }, [currentPage]);
+      : `Circular Notícias RJ — ${regionLabelForTitle}`;
+    document.title = currentPage === 1 ? base : `${base} — Página ${currentPage}`;
+  }, [currentPage, activeRegion]);
 
   useEffect(() => {
     if (!loading && paginacaoAtiva && currentPage > totalPages && totalPages > 0) {
@@ -447,22 +467,23 @@ Responda APENAS com JSON válido, sem markdown.`,
             </div>
             <div style={{ color:"#64748b", fontSize:11 }}>{todayLabel}</div>
           </div>
+
           <div style={{ display:"flex", gap:8, paddingBottom:10 }}>
             <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key==="Enter" && handleSearch()}
-              placeholder="🔍  Busque por cidade, tema ou assunto..."
+              placeholder="🔍 Busque por cidade, tema ou assunto..."
               style={{ flex:1, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, padding:"9px 14px", color:"#fff", fontSize:13, outline:"none", minWidth:0 }}/>
             <button onClick={handleSearch} disabled={searchLoading}
               style={{ background:"#3b82f6", border:"none", borderRadius:8, padding:"9px 18px", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
               {searchLoading ? "..." : "Buscar"}
             </button>
           </div>
+
           <div style={{ display:"flex", gap:4, overflowX:"auto", paddingBottom:10, scrollbarWidth:"none" }}>
             {REGIONS.map(r => (
               <button key={r.id} onClick={() => {
-                setActiveRegion(r.id);
-                setSearchResults(null);
-                if (r.id !== "todos") goToPage(1);
-              }}
+                  goToRegion(r.id);
+                  setSearchResults(null);
+                }}
                 style={{ background:activeRegion===r.id?"#3b82f6":"transparent", border:"1px solid "+(activeRegion===r.id?"#3b82f6":"rgba(255,255,255,0.12)"), borderRadius:6, padding:"5px 12px", color:activeRegion===r.id?"#fff":"#94a3b8", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s" }}>
                 {r.label}
               </button>
@@ -504,6 +525,7 @@ Responda APENAS com JSON válido, sem markdown.`,
                 ))}
               </div>
             )}
+
             {activeRegion === "baixada" && (
               <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:12, scrollbarWidth:"none" }}>
                 {BAIXADA_CITIES.map(c => (
@@ -552,19 +574,32 @@ Responda APENAS com JSON válido, sem markdown.`,
               <div style={{ color:"#38bdf8", fontWeight:700, fontSize:10, letterSpacing:3 }}>NOTÍCIAS RJ</div>
             </div>
           </div>
+
           <p style={{ margin:0, fontSize:13, color:"#94a3b8", fontStyle:"italic" }}>
             Tudo o que acontece no Estado do Rio de Janeiro, em um só lugar.
           </p>
+
+          <nav style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:"6px 14px", margin:"4px 0" }}>
+            {FOOTER_LINKS.map(link => (
+              <Link key={link.to} to={link.to} style={{ color:"#94a3b8", fontSize:12, fontWeight:600, textDecoration:"none" }}>
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+
           <div style={{ width:40, height:1, background:"rgba(255,255,255,0.1)" }}/>
+
           <div style={{ fontSize:13, color:"#64748b" }}>
             Contato:{" "}
             <a href="mailto:circularnoticias@gmail.com" style={{ color:"#38bdf8", fontWeight:600, textDecoration:"none" }}>
               circularnoticias@gmail.com
             </a>
           </div>
+
           <p style={{ margin:0, fontSize:12, color:"#64748b", fontWeight:600 }}>
             Centro Inteligente de Notícias do Estado do Rio de Janeiro.
           </p>
+
           <p style={{ margin:0, fontSize:11, color:"#475569" }}>
             © 2026 Circular Notícias RJ – Todos os direitos reservados.
           </p>
