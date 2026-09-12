@@ -373,7 +373,6 @@ export default function App() {
 }
 
 // ─── Conteúdo principal ─────────────────────────────────────────────────────
-function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion }) {
 function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlugFromUrl, goToCity }) {
   const [activeRegion, setActiveRegion] = useState(regionFromUrl);
   const activeCity = citySlugFromUrl; // slug da cidade ativa, ou null se nenhuma
