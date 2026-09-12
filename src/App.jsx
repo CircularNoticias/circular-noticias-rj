@@ -26,6 +26,7 @@ const REGIONS = [
   { id: "costa-verde", label: "Costa Verde" },
   { id: "medio-paraiba", label: "Médio Paraíba" },
   { id: "centro-sul", label: "Centro-Sul Fluminense" },
+  { id: "geral", label: "Geral" },
 ];
 
 const VALID_REGION_IDS = REGIONS.map(r => r.id).filter(id => id !== "todos");
@@ -169,9 +170,13 @@ function normalizeImageUrl(value) {
 
 function mapRow(row) {
   const { date, time } = formatDateTime(row.created_at);
+  const isGenerica = FONTES_GENERICAS.has(row.fonte_nome);
   return {
     id: row.id,
-    region: resolveRegion(row),
+    // Fontes genéricas (conteúdo nacional, sem recorte do RJ) não pertencem
+    // a nenhuma região estadual — vão direto para a aba "Geral", em vez de
+    // cair no fallback "metropolitana" de resolveRegion().
+    region: isGenerica ? "geral" : resolveRegion(row),
     city: row.cidade || "",
     category: row.categoria || "Geral",
     headline: stripHtml(row.titulo),
@@ -180,7 +185,7 @@ function mapRow(row) {
     sourceUrl: row.url_original || "",
     image: row.imagem_origem === "fallback" ? null : normalizeImageUrl(row.imagem_url),
     isOficial: FONTES_OFICIAIS.has(row.fonte_nome),
-    isGenerica: FONTES_GENERICAS.has(row.fonte_nome),
+    isGenerica,
     date, time,
   };
 }
