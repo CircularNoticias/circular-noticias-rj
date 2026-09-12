@@ -556,11 +556,26 @@ Responda APENAS com JSON válido, sem markdown.`,
         ) : (
           <>
     
-            {activeRegion !== "todos" && CITIES_BY_REGION[activeRegion]?.length > 0 && (
+            {activeRegion !== "todos" && !activeCity && CITIES_BY_REGION[activeRegion]?.length > 0 && (
               <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:12, scrollbarWidth:"none" }}>
                 {CITIES_BY_REGION[activeRegion].map(c => (
-                  <span key={c} style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap" }}>📍 {c}</span>
+                  <button key={c} onClick={() => goToCity(slugify(c))}
+                    style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap", border:"none", cursor:"pointer" }}>
+                    📍 {c}
+                  </button>
                 ))}
+              </div>
+            )}
+
+            {activeCity && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, paddingBottom:12 }}>
+                <span style={{ background:"#1d4ed8", color:"#fff", fontSize:12, fontWeight:700, padding:"5px 14px", borderRadius:20 }}>
+                  📍 {news.find(n => slugify(n.city) === activeCity)?.city || activeCity}
+                </span>
+                <button onClick={() => goToRegion(activeRegion)}
+                  style={{ background:"none", border:"none", color:"#64748b", fontSize:12, fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>
+                  ← ver toda a região
+                </button>
               </div>
             )}
 
