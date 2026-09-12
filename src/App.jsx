@@ -374,7 +374,9 @@ export default function App() {
 
 // ─── Conteúdo principal ─────────────────────────────────────────────────────
 function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion }) {
+function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlugFromUrl, goToCity }) {
   const [activeRegion, setActiveRegion] = useState(regionFromUrl);
+  const activeCity = citySlugFromUrl; // slug da cidade ativa, ou null se nenhuma
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
@@ -409,13 +411,15 @@ function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion }) {
     return () => { mounted = false; };
   }, []);
 
-  // Pool filtrado por região
-  const pool = activeRegion === "todos"
-    ? news
-    : news.filter(n => n.region === activeRegion);
+  // Pool filtrado por cidade (prioridade) ou por região
+  const pool = activeCity
+    ? news.filter(n => slugify(n.city) === activeCity)
+    : activeRegion === "todos"
+      ? news
+      : news.filter(n => n.region === activeRegion);
 
   // ─── Paginação ──────────────────────────────────────────────────────────
-  const paginacaoAtiva = activeRegion === "todos";
+  const paginacaoAtiva = activeRegion === "todos" && !activeCity;
   const PAGE1_SIZE = 32;
 
   const feedCurado = useMemo(
