@@ -22,6 +22,8 @@ export const FONTES_OFICIAIS = new Set([
 export const FONTES_GENERICAS = new Set([
   "Tua Saúde","Guia do Estudante (Abril)","Fuxico TV","Caras",
   "Revista PEGN (Globo)","Saúde Abril","Casa da Ciência","InfoMoney",
+  "Olhar Digital","Revista Galileu","Tempo.com","Revista Ana Maria",
+  "Canaltech","Agência Brasil","Bravo",
 ]);
 
 // ─── Ordem de prioridade das categorias (rotaciona a cada sessão) ───────────
