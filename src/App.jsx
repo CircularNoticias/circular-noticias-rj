@@ -385,9 +385,16 @@ function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlug
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    setActiveRegion(regionFromUrl);
-  }, [regionFromUrl]);
-
+    if (citySlugFromUrl) {
+      // Ao chegar direto numa página de cidade, descobre a região real
+      // dessa cidade (via CITY_TO_REGION) para destacar a aba correta e
+      // para o botão "voltar" levar à região certa, não a "Todo o Estado".
+      const cityName = Object.keys(CITY_TO_REGION).find(c => slugify(c) === citySlugFromUrl);
+      setActiveRegion(cityName ? CITY_TO_REGION[cityName] : "todos");
+    } else {
+      setActiveRegion(regionFromUrl);
+    }
+  }, [regionFromUrl, citySlugFromUrl]);
   useEffect(() => {
     let mounted = true;
     (async () => {
