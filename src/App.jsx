@@ -140,6 +140,19 @@ function resolveRegion(row) {
   return normalizeRegiao(row.regiao) || CITY_TO_REGION[row.cidade] || "metropolitana";
 }
 
+// Transforma o nome de uma cidade em slug de URL: remove acentos, minúsculo,
+// espaços viram hífen. Ex: "São João da Barra" → "sao-joao-da-barra"
+function slugify(str) {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "");
+}
+
 function stripHtml(raw) {
   if (!raw) return "";
   let t = String(raw).replace(/<[^>]*>/g, " ");
@@ -317,9 +330,11 @@ function PageWrapper() {
 
   const pageMatch = location.pathname.match(/^\/pagina\/(\d+)\/?$/);
   const regionMatch = location.pathname.match(/^\/regiao\/([a-z-]+)\/?$/);
+  const cityMatch = location.pathname.match(/^\/cidade\/([a-z0-9-]+)\/?$/);
 
   const currentPage = pageMatch ? Math.max(1, parseInt(pageMatch[1], 10) || 1) : 1;
   const regionFromUrl = regionMatch && VALID_REGION_IDS.includes(regionMatch[1]) ? regionMatch[1] : "todos";
+  const citySlugFromUrl = cityMatch ? cityMatch[1] : null;
 
   const goToPage = (p) => {
     if (p < 1) return;
@@ -332,7 +347,12 @@ function PageWrapper() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  return <AppContent currentPage={currentPage} goToPage={goToPage} regionFromUrl={regionFromUrl} goToRegion={goToRegion} />;
+  const goToCity = (citySlug) => {
+    navigate(`/cidade/${citySlug}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return <AppContent currentPage={currentPage} goToPage={goToPage} regionFromUrl={regionFromUrl} goToRegion={goToRegion} citySlugFromUrl={citySlugFromUrl} goToCity={goToCity} />;
 }
 
 export default function App() {
