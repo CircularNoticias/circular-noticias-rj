@@ -6,80 +6,96 @@
     <priority>1.0</priority>
   </url>
 
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/metropolitana</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/baixada</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/lagos</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/serrana</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/norte</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/noroeste</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/costa-verde</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/medio-paraiba</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/regiao/centro-sul</loc>
-    <changefreq>hourly</changefreq>
-    <priority>0.9</priority>
-  </url>
+  <!-- Regiões -->
+  <url><loc>https://www.circularnoticias.com.br/regiao/metropolitana</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/baixada</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/lagos</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/serrana</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/norte</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/noroeste</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/costa-verde</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/medio-paraiba</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/centro-sul</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/regiao/geral</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
 
-  <url>
-    <loc>https://www.circularnoticias.com.br/quem-somos</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/publicidade</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/divulgue-sua-empresa</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/contato</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/termos-de-uso</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://www.circularnoticias.com.br/privacidade</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
+  <!-- Municípios — Região Metropolitana -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/rio-de-janeiro</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/niteroi</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/sao-goncalo</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/itaborai</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/marica</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/mage</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/guapimirim</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/rio-bonito</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Baixada Fluminense -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/nova-iguacu</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/duque-de-caxias</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/belford-roxo</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/nilopolis</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/mesquita</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/queimados</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/sao-joao-de-meriti</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/japeri</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/seropedica</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/itaguai</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/paracambi</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Região dos Lagos -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/cabo-frio</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/arraial-do-cabo</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/armacao-dos-buzios</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/buzios</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/sao-pedro-da-aldeia</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/araruama</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/saquarema</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/iguaba-grande</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/casimiro-de-abreu</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Região Serrana -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/petropolis</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/teresopolis</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/nova-friburgo</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/cachoeiras-de-macacu</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/cordeiro</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/bom-jardim</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Norte Fluminense -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/campos-dos-goytacazes</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/macae</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/sao-joao-da-barra</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/quissama</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/carapebus</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Noroeste Fluminense -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/itaperuna</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/santo-antonio-de-padua</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/miracema</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/natividade</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Costa Verde -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/angra-dos-reis</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/paraty</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/mangaratiba</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Médio Paraíba -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/volta-redonda</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/barra-mansa</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/resende</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/barra-do-pirai</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/itatiaia</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Municípios — Centro-Sul Fluminense -->
+  <url><loc>https://www.circularnoticias.com.br/cidade/vassouras</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/valenca</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/cidade/miguel-pereira</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+
+  <!-- Páginas institucionais -->
+  <url><loc>https://www.circularnoticias.com.br/quem-somos</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/publicidade</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/divulgue-sua-empresa</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/contato</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/termos-de-uso</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.circularnoticias.com.br/privacidade</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
 </urlset>
+    
