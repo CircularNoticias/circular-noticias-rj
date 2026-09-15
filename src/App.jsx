@@ -11,6 +11,7 @@ import QuemSomos from "./pages/QuemSomos.jsx";
 import TermosDeUso from "./pages/TermosDeUso.jsx";
 import Privacidade from "./pages/Privacidade.jsx";
 import Contato from "./pages/Contato.jsx";
+import AdCard from "./components/AdCard.jsx";
 
 // ─── Paginação ──────────────────────────────────────────────────────────────
 const ITEMS_PER_PAGE = 24; // notícias por página a partir da página 2
