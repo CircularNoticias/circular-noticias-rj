@@ -607,7 +607,12 @@ Responda APENAS com JSON válido, sem markdown.`,
                 </div>
               ) : (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
-                  {cards.map(n => <NewsCard key={n.id} news={n}/>)}
+                  {cards.map((n, i) => (
+                    <>
+                      <NewsCard key={n.id} news={n}/>
+                      {(i + 1) % 5 === 0 && <AdCard key={`ad-${i}`} regiao={activeRegion} />}
+                    </>
+                  ))}
                 </div>
               )}
 
