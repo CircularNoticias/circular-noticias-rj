@@ -99,12 +99,7 @@ export default function AdCard({ regiao = "*" }) {
       <div style={{ padding: "14px 16px 16px", flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b", lineHeight: 1.35 }}>
           {campanha.titulo}
-        </h3>
-        {campanha.descricao && (
-          <div style={{ background: "#fffbeb", borderRadius: 8, padding: "10px 12px" }}>
-            <p style={{ margin: 0, fontSize: 14, color: "#78350f", lineHeight: 1.5 }}>{campanha.descricao}</p>
-          </div>
-        )}
+        </h3>  
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
           <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Publicidade</span>
           <span
