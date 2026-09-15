@@ -55,7 +55,7 @@ export default function AdCard({ regiao = "*" }) {
       }}
     >
       {campanha.imagem_url ? (
-        <div style={{ width: "100%", height: 140, position: "relative", background: "#e2e8f0", flexShrink: 0 }}>
+        <div style={{ width: "100%", height: 220, position: "relative", background: "#e2e8f0", flexShrink: 0 }}>
           <img
             src={campanha.imagem_url}
             alt={campanha.titulo}
