@@ -458,13 +458,51 @@ function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlug
           PAGE1_SIZE + (currentPage - 1) * ITEMS_PER_PAGE
         );
 
+  // ─── SEO dinâmico: title + meta description + canonical por rota ──────────
+  // Cobre Estado (/), Região (/regiao/:slug), Cidade (/cidade/:slug) e
+  // paginação (/pagina/:num). Não mexe no viewport nem em keywords.
   useEffect(() => {
-    const regionLabelForTitle = REGIONS.find(r => r.id === activeRegion)?.label;
-    const base = activeRegion === "todos"
-      ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
-      : `Circular Notícias RJ — ${regionLabelForTitle}`;
-    document.title = currentPage === 1 ? base : `${base} — Página ${currentPage}`;
-  }, [currentPage, activeRegion]);
+    const SITE_URL = "https://www.circularnoticias.com.br";
+    let path, title, description;
+
+    if (activeCity) {
+      const cityName = Object.keys(CITY_TO_REGION).find(c => slugify(c) === activeCity) || activeCity;
+      path = `/cidade/${activeCity}`;
+      title = `${cityName} — Notícias | Circular Notícias RJ`;
+      description = `Acompanhe as últimas notícias de ${cityName}, no Estado do Rio de Janeiro: política, segurança, saúde, economia e mais, atualizadas em tempo real pelo Circular Notícias RJ.`;
+    } else if (activeRegion !== "todos") {
+      const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "";
+      path = `/regiao/${activeRegion}`;
+      title = currentPage === 1
+        ? `${regionLabel} — Notícias | Circular Notícias RJ`
+        : `${regionLabel} — Notícias | Circular Notícias RJ — Página ${currentPage}`;
+      description = `Notícias da ${regionLabel}, no Estado do Rio de Janeiro, atualizadas em tempo real pelo Circular Notícias RJ.`;
+    } else {
+      path = currentPage === 1 ? "/" : `/pagina/${currentPage}`;
+      title = currentPage === 1
+        ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
+        : `Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro — Página ${currentPage}`;
+      description = "Circular Notícias RJ — Portal de notícias do Estado do Rio de Janeiro. Tudo o que acontece no estado, por região e cidade, atualizado em tempo real.";
+    }
+
+    document.title = title;
+
+    let metaDescriptionTag = document.querySelector('meta[name="description"]');
+    if (!metaDescriptionTag) {
+      metaDescriptionTag = document.createElement("meta");
+      metaDescriptionTag.setAttribute("name", "description");
+      document.head.appendChild(metaDescriptionTag);
+    }
+    metaDescriptionTag.setAttribute("content", description);
+
+    let canonicalTag = document.querySelector('link[rel="canonical"]');
+    if (!canonicalTag) {
+      canonicalTag = document.createElement("link");
+      canonicalTag.setAttribute("rel", "canonical");
+      document.head.appendChild(canonicalTag);
+    }
+    canonicalTag.setAttribute("href", `${SITE_URL}${path}`);
+  }, [currentPage, activeRegion, activeCity]);
 
   useEffect(() => {
     if (!loading && paginacaoAtiva && currentPage > totalPages && totalPages > 0) {
