@@ -3,6 +3,7 @@ import { Routes, Route, useLocation, useNavigate, Link } from "react-router-dom"
 import { supabase } from "./lib/supabaseClient";
 import { AdminLogin, AdminDashboard, RequireAuth } from "./admin/Admin.jsx";
 import { AdminInsights } from "./admin/Insights.jsx";
+import { AdsLogin, RequireAdsAuth, AdminAnuncios } from "./admin/Anuncios.jsx";
 import { FONTES_OFICIAIS, FONTES_GENERICAS, curarFeedCompleto } from "./lib/curadoria.js";
 import { Logo } from "./components/Logo.jsx";
 import Publicidade from "./pages/Publicidade.jsx";
@@ -362,6 +363,8 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
       <Route path="/admin/insights" element={<RequireAuth><AdminInsights /></RequireAuth>} />
+      <Route path="/admin/anuncios/login" element={<AdsLogin />} />
+      <Route path="/admin/anuncios" element={<RequireAdsAuth><AdminAnuncios /></RequireAdsAuth>} />
       <Route path="/publicidade" element={<Publicidade />} />
       <Route path="/divulgue-sua-empresa" element={<DivulgueSuaEmpresa />} />
       <Route path="/quem-somos" element={<QuemSomos />} />
