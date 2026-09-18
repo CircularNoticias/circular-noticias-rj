@@ -606,10 +606,10 @@ Responda APENAS com JSON válido, sem markdown.`,
             {activeRegion !== "todos" && !activeCity && CITIES_BY_REGION[activeRegion]?.length > 0 && (
               <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:12, scrollbarWidth:"none" }}>
                 {CITIES_BY_REGION[activeRegion].map(c => (
-                  <button key={c} onClick={() => goToCity(slugify(c))}
-                    style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap", border:"none", cursor:"pointer" }}>
+                  <Link key={c} to={`/cidade/${slugify(c)}`}
+                    style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, whiteSpace:"nowrap", border:"none", cursor:"pointer", textDecoration:"none", display:"inline-block" }}>
                     📍 {c}
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}
