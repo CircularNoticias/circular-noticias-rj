@@ -629,11 +629,11 @@ Responda APENAS com JSON válido, sem markdown.`,
             <div style={{ marginBottom:12 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
                 <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
-                <h2 style={{ margin:0, fontSize:15, fontWeight:800, color:"#1e293b", letterSpacing:-0.3 }}>
+                <h1 style={{ margin:0, fontSize:15, fontWeight:800, ... }}>
                   {activeCity
-                    ? (news.find(n => slugify(n.city) === activeCity)?.city || activeCity).toUpperCase()
-                    : activeRegion === "todos" ? "DESTAQUES DO ESTADO" : regionLabel.toUpperCase()}
-                </h2>
+                    ? (news.find(n => slugify(n.city) === activeCity...
+                    : activeRegion === "todos" ? "DESTAQUES DO ESTAD...
+                </h1>
                 <span style={{ background:"#fee2e2", color:"#dc2626", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10 }}>AO VIVO</span>
                 <span style={{ background:"#f1f5f9", color:"#64748b", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10, marginLeft:"auto" }}>
                   {cards.length} notícia{cards.length !== 1 ? "s" : ""}
