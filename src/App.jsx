@@ -619,10 +619,10 @@ Responda APENAS com JSON válido, sem markdown.`,
                 <span style={{ background:"#1d4ed8", color:"#fff", fontSize:12, fontWeight:700, padding:"5px 14px", borderRadius:20 }}>
                   📍 {news.find(n => slugify(n.city) === activeCity)?.city || activeCity}
                 </span>
-                <button onClick={() => goToRegion(activeRegion)}
+                <Link to={activeRegion === "todos" ? "/" : `/regiao/${activeRegion}`}
                   style={{ background:"none", border:"none", color:"#64748b", fontSize:12, fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>
                   ← ver toda a região
-                </button>
+                </Link>
               </div>
             )}
 
