@@ -93,7 +93,7 @@ const CITY_TO_REGION = {
   "São João de Meriti":"baixada","Japeri":"baixada",
   "Seropédica":"baixada","Itaguaí":"baixada","Paracambi":"baixada",
 
-  "Cabo Frio":"lagos","Arraial do Cabo":"lagos","Armação dos Búzios":"lagos",
+  "Cabo Frio":"lagos","Arraial do Cabo":"lagos",
   "Búzios":"lagos","São Pedro da Aldeia":"lagos","Araruama":"lagos",
   "Saquarema":"lagos","Iguaba Grande":"lagos","Casimiro de Abreu":"lagos",
 
