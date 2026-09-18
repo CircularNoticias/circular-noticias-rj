@@ -565,13 +565,12 @@ Responda APENAS com JSON válido, sem markdown.`,
 
           <div style={{ display:"flex", gap:4, overflowX:"auto", paddingBottom:10, scrollbarWidth:"none" }}>
             {REGIONS.map(r => (
-              <button key={r.id} onClick={() => {
-                  goToRegion(r.id);
-                  setSearchResults(null);
-                }}
-                style={{ background:activeRegion===r.id?"#3b82f6":"transparent", border:"1px solid "+(activeRegion===r.id?"#3b82f6":"rgba(255,255,255,0.12)"), borderRadius:6, padding:"5px 12px", color:activeRegion===r.id?"#fff":"#94a3b8", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s" }}>
+              <Link key={r.id}
+                to={r.id === "todos" ? "/" : `/regiao/${r.id}`}
+                onClick={() => setSearchResults(null)}
+                style={{ background:activeRegion===r.id?"#3b82f6":"transparent", border:"1px solid "+(activeRegion===r.id?"#3b82f6":"rgba(255,255,255,0.12)"), borderRadius:6, padding:"5px 12px", color:activeRegion===r.id?"#fff":"#94a3b8", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.15s", textDecoration:"none", display:"inline-block" }}>
                 {r.label}
-              </button>
+              </Link>
             ))}
           </div>
         </div>
