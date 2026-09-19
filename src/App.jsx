@@ -674,7 +674,30 @@ Responda APENAS com JSON válido, sem markdown.`,
                 </Link>
               </div>
             )}
-
+            
+            <nav aria-label="breadcrumb" style={{ fontSize:12, color:"#94a3b8", marginBottom:10, display:"flex", gap:6, flexWrap:"wrap" }}>
+              <Link to="/" style={{ color:"#94a3b8", textDecoration:"none" }}>Início</Link>
+              {activeRegion !== "todos" && (
+                <>
+                  <span>›</span>
+                  {activeCity ? (
+                    <Link to={`/regiao/${activeRegion}`} style={{ color:"#94a3b8", textDecoration:"none" }}>{regionLabel}</Link>
+                  ) : (
+                    <span style={{ color:"#64748b", fontWeight:600 }}>{regionLabel}</span>
+                  )}
+                </>
+              )}
+              {activeCity && (
+                <>
+                  <span>›</span>
+                  <span style={{ color:"#64748b", fontWeight:600 }}>
+                    {news.find(n => slugify(n.city) === activeCity)?.city || activeCity}
+                  </span>
+                </>
+              )}
+            </nav>
+            
+            <div style={{ marginBottom:12 }}>
             <div style={{ marginBottom:12 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
                 <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
