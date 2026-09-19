@@ -463,16 +463,25 @@ function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlug
 
   // ─── SEO dinâmico: title + meta description + canonical por rota ──────────
   // Cobre Estado (/), Região (/regiao/:slug), Cidade (/cidade/:slug) e
-  // paginação (/pagina/:num). Não mexe no viewport nem em keywords.
+  // paginação (/pagina/:num). Também injeta WebSite (uma vez) e
+  // BreadcrumbList (atualizado por rota) em Schema.org. Não mexe no
+  // viewport nem em keywords.
   useEffect(() => {
     const SITE_URL = "https://www.circularnoticias.com.br";
     let path, title, description;
+    let breadcrumbItems; // [{ name, url? }] — sem url = página atual
 
     if (activeCity) {
       const cityName = Object.keys(CITY_TO_REGION).find(c => slugify(c) === activeCity) || activeCity;
+      const cityRegionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "";
       path = `/cidade/${activeCity}`;
       title = `${cityName} — Notícias | Circular Notícias RJ`;
       description = `Acompanhe as últimas notícias de ${cityName}, no Estado do Rio de Janeiro: política, segurança, saúde, economia e mais, atualizadas em tempo real pelo Circular Notícias RJ.`;
+      breadcrumbItems = [
+        { name: "Início", url: `${SITE_URL}/` },
+        { name: cityRegionLabel, url: `${SITE_URL}/regiao/${activeRegion}` },
+        { name: cityName },
+      ];
     } else if (activeRegion !== "todos") {
       const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "";
       path = `/regiao/${activeRegion}`;
@@ -480,12 +489,19 @@ function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlug
         ? `${regionLabel} — Notícias | Circular Notícias RJ`
         : `${regionLabel} — Notícias | Circular Notícias RJ — Página ${currentPage}`;
       description = `Notícias da ${regionLabel}, no Estado do Rio de Janeiro, atualizadas em tempo real pelo Circular Notícias RJ.`;
+      breadcrumbItems = [
+        { name: "Início", url: `${SITE_URL}/` },
+        { name: regionLabel },
+      ];
     } else {
       path = currentPage === 1 ? "/" : `/pagina/${currentPage}`;
       title = currentPage === 1
         ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
         : `Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro — Página ${currentPage}`;
       description = "Circular Notícias RJ — Portal de notícias do Estado do Rio de Janeiro. Tudo o que acontece no estado, por região e cidade, atualizado em tempo real.";
+      breadcrumbItems = currentPage === 1
+        ? [{ name: "Início" }]
+        : [{ name: "Início", url: `${SITE_URL}/` }, { name: `Página ${currentPage}` }];
     }
 
     document.title = title;
@@ -505,8 +521,41 @@ function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlug
       document.head.appendChild(canonicalTag);
     }
     canonicalTag.setAttribute("href", `${SITE_URL}${path}`);
-  }, [currentPage, activeRegion, activeCity]);
 
+    // WebSite (Schema.org) — injetado uma única vez, independente da rota
+    if (!document.getElementById("ld-website")) {
+      const websiteTag = document.createElement("script");
+      websiteTag.type = "application/ld+json";
+      websiteTag.id = "ld-website";
+      websiteTag.textContent = JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Circular Notícias RJ",
+        "url": `${SITE_URL}/`,
+      });
+      document.head.appendChild(websiteTag);
+    }
+
+    // BreadcrumbList (Schema.org) — atualizado a cada troca de rota
+    let breadcrumbTag = document.getElementById("ld-breadcrumb");
+    if (!breadcrumbTag) {
+      breadcrumbTag = document.createElement("script");
+      breadcrumbTag.type = "application/ld+json";
+      breadcrumbTag.id = "ld-breadcrumb";
+      document.head.appendChild(breadcrumbTag);
+    }
+    breadcrumbTag.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": breadcrumbItems.map((item, i) => ({
+        "@type": "ListItem",
+        "position": i + 1,
+        "name": item.name,
+        ...(item.url ? { item: item.url } : {}),
+      })),
+    });
+  }, [currentPage, activeRegion, activeCity]);
+  
   useEffect(() => {
     if (!loading && paginacaoAtiva && currentPage > totalPages && totalPages > 0) {
       goToPage(1);
