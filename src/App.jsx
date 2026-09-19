@@ -698,7 +698,6 @@ Responda APENAS com JSON válido, sem markdown.`,
             </nav>
             
             <div style={{ marginBottom:12 }}>
-            <div style={{ marginBottom:12 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
                 <div style={{ width:3, height:20, background:"#ef4444", borderRadius:2 }}/>
                 <h1 style={{ margin:0, fontSize:15, fontWeight:800, color:"#1e293b", letterSpacing:-0.3 }}>
