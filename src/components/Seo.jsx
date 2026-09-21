@@ -4,7 +4,7 @@ const SITE_NAME = "Circular Notícias RJ";
 const SITE_URL = "https://circularnoticias.com.br";
 const DEFAULT_DESCRIPTION = "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro, em um só lugar.";
 
-export default function Seo({ title, description, path = "" }) {
+export default function Seo({ title, description, path = "", noIndex = false }) {
   const fullTitle = title ? `${title} | ${SITE_NAME}` : SITE_NAME;
   const desc = description || DEFAULT_DESCRIPTION;
   const url = `${SITE_URL}${path}`;
@@ -14,6 +14,7 @@ export default function Seo({ title, description, path = "" }) {
       <title>{fullTitle}</title>
       <meta name="description" content={desc} />
       <link rel="canonical" href={url} />
+      {noIndex && <meta name="robots" content="noindex, follow" />}
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={desc} />
       <meta property="og:url" content={url} />
