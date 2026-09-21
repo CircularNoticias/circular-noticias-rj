@@ -605,9 +605,11 @@ const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday:"short", day
         ? `/regiao/${activeRegion}`
         : currentPage > 1 ? `/pagina/${currentPage}` : "/";
 
+    const seoNoIndex = !loading && (activeRegion !== "todos" || !!activeCity) && cards.length === 0;
+
     return (
       <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" }}>
-        <Seo title={seoTitle} description={seoDescription} path={seoPath} />
+        <Seo title={seoTitle} description={seoDescription} path={seoPath} noIndex={seoNoIndex} />
       <header style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", padding:"0 16px", boxShadow:"0 2px 20px rgba(0,0,0,0.3)" }}>
         <div style={{ maxWidth:1100, margin:"0 auto" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingTop:14, paddingBottom:10 }}>
