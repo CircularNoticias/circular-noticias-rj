@@ -13,6 +13,7 @@ import TermosDeUso from "./pages/TermosDeUso.jsx";
 import Privacidade from "./pages/Privacidade.jsx";
 import Contato from "./pages/Contato.jsx";
 import AdCard from "./components/AdCard.jsx";
+import Seo from "./components/Seo.jsx";
 
 // ─── Paginação ──────────────────────────────────────────────────────────────
 const ITEMS_PER_PAGE = 24; // notícias por página a partir da página 2
@@ -584,11 +585,29 @@ Responda APENAS com JSON válido, sem markdown.`,
     setSearchLoading(false); setSearch("");
   };
 
-  const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday:"short", day:"2-digit", month:"short", year:"numeric" });
-  const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "Todo o Estado";
+const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday:"short", day:"2-digit", month:"short", year:"numeric" });
+    const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "Todo o Estado";
 
-  return (
-    <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" }}>
+    const cityNameForSeo = activeCity ? (news.find(n => slugify(n.city) === activeCity)?.city || activeCity) : null;
+    const seoTitle = cityNameForSeo
+      ? `Notícias de ${cityNameForSeo}`
+      : activeRegion !== "todos"
+        ? `Notícias da ${regionLabel}`
+        : null;
+    const seoDescription = cityNameForSeo
+      ? `Últimas notícias de ${cityNameForSeo} e região — atualizado ao vivo pelo Circular Notícias RJ.`
+      : activeRegion !== "todos"
+        ? `Últimas notícias da ${regionLabel}, Rio de Janeiro — atualizado ao vivo pelo Circular Notícias RJ.`
+        : null;
+    const seoPath = cityNameForSeo
+      ? `/cidade/${activeCity}`
+      : activeRegion !== "todos"
+        ? `/regiao/${activeRegion}`
+        : currentPage > 1 ? `/pagina/${currentPage}` : "/";
+
+    return (
+      <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" }}>
+        <Seo title={seoTitle} description={seoDescription} path={seoPath} />
       <header style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", padding:"0 16px", boxShadow:"0 2px 20px rgba(0,0,0,0.3)" }}>
         <div style={{ maxWidth:1100, margin:"0 auto" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingTop:14, paddingBottom:10 }}>
