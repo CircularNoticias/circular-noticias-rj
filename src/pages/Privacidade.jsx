@@ -101,6 +101,25 @@ export default function Privacidade() {
         informações pessoais do usuário além do necessário ao funcionamento da plataforma, nem que endosse
         o produto ou serviço anunciado.
       </p>
+      <p>
+        O Circular Notícias RJ também poderá utilizar o Google AdSense, serviço de publicidade fornecido
+        pelo Google, para exibir anúncios de terceiros na plataforma.
+      </p>
+      <p>
+        O Google e seus parceiros publicitários podem utilizar cookies e identificadores semelhantes para
+        exibir anúncios com base nas visitas do usuário a este e a outros sites. O usuário pode gerenciar
+        suas preferências de anúncios personalizados, inclusive desativá-los, nas{" "}
+        <a href="https://adssettings.google.com/" target="_blank" rel="noopener noreferrer" style={linkStyle}>
+          Configurações de Anúncios do Google
+        </a>.
+      </p>
+      <p>
+        Mais informações sobre como o Google utiliza dados de sites e aplicativos parceiros estão
+        disponíveis em:{" "}
+        <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer" style={linkStyle}>
+          policies.google.com/technologies/partner-sites
+        </a>.
+      </p>
 
       <h2 style={sectionStyle}>7. Serviços de terceiros</h2>
       <p>
