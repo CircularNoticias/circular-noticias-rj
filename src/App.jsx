@@ -462,101 +462,6 @@ function AppContent({ currentPage, goToPage, regionFromUrl, goToRegion, citySlug
           PAGE1_SIZE + (currentPage - 1) * ITEMS_PER_PAGE
         );
 
-  // ─── SEO dinâmico: title + meta description + canonical por rota ──────────
-  // Cobre Estado (/), Região (/regiao/:slug), Cidade (/cidade/:slug) e
-  // paginação (/pagina/:num). Também injeta WebSite (uma vez) e
-  // BreadcrumbList (atualizado por rota) em Schema.org. Não mexe no
-  // viewport nem em keywords.
-  useEffect(() => {
-    const SITE_URL = "https://www.circularnoticias.com.br";
-    let path, title, description;
-    let breadcrumbItems; // [{ name, url? }] — sem url = página atual
-
-    if (activeCity) {
-      const cityName = Object.keys(CITY_TO_REGION).find(c => slugify(c) === activeCity) || activeCity;
-      const cityRegionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "";
-      path = `/cidade/${activeCity}`;
-      title = `${cityName} — Notícias | Circular Notícias RJ`;
-      description = `Acompanhe as últimas notícias de ${cityName}, no Estado do Rio de Janeiro: política, segurança, saúde, economia e mais, atualizadas em tempo real pelo Circular Notícias RJ.`;
-      breadcrumbItems = [
-        { name: "Início", url: `${SITE_URL}/` },
-        { name: cityRegionLabel, url: `${SITE_URL}/regiao/${activeRegion}` },
-        { name: cityName },
-      ];
-    } else if (activeRegion !== "todos") {
-      const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "";
-      path = `/regiao/${activeRegion}`;
-      title = currentPage === 1
-        ? `${regionLabel} — Notícias | Circular Notícias RJ`
-        : `${regionLabel} — Notícias | Circular Notícias RJ — Página ${currentPage}`;
-      description = `Notícias da ${regionLabel}, no Estado do Rio de Janeiro, atualizadas em tempo real pelo Circular Notícias RJ.`;
-      breadcrumbItems = [
-        { name: "Início", url: `${SITE_URL}/` },
-        { name: regionLabel },
-      ];
-    } else {
-      path = currentPage === 1 ? "/" : `/pagina/${currentPage}`;
-      title = currentPage === 1
-        ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
-        : `Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro — Página ${currentPage}`;
-      description = "Circular Notícias RJ — Portal de notícias do Estado do Rio de Janeiro. Tudo o que acontece no estado, por região e cidade, atualizado em tempo real.";
-      breadcrumbItems = currentPage === 1
-        ? [{ name: "Início" }]
-        : [{ name: "Início", url: `${SITE_URL}/` }, { name: `Página ${currentPage}` }];
-    }
-
-    document.title = title;
-
-    let metaDescriptionTag = document.querySelector('meta[name="description"]');
-    if (!metaDescriptionTag) {
-      metaDescriptionTag = document.createElement("meta");
-      metaDescriptionTag.setAttribute("name", "description");
-      document.head.appendChild(metaDescriptionTag);
-    }
-    metaDescriptionTag.setAttribute("content", description);
-
-    let canonicalTag = document.querySelector('link[rel="canonical"]');
-    if (!canonicalTag) {
-      canonicalTag = document.createElement("link");
-      canonicalTag.setAttribute("rel", "canonical");
-      document.head.appendChild(canonicalTag);
-    }
-    canonicalTag.setAttribute("href", `${SITE_URL}${path}`);
-
-    // WebSite (Schema.org) — injetado uma única vez, independente da rota
-    if (!document.getElementById("ld-website")) {
-      const websiteTag = document.createElement("script");
-      websiteTag.type = "application/ld+json";
-      websiteTag.id = "ld-website";
-      websiteTag.textContent = JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "Circular Notícias RJ",
-        "url": `${SITE_URL}/`,
-      });
-      document.head.appendChild(websiteTag);
-    }
-
-    // BreadcrumbList (Schema.org) — atualizado a cada troca de rota
-    let breadcrumbTag = document.getElementById("ld-breadcrumb");
-    if (!breadcrumbTag) {
-      breadcrumbTag = document.createElement("script");
-      breadcrumbTag.type = "application/ld+json";
-      breadcrumbTag.id = "ld-breadcrumb";
-      document.head.appendChild(breadcrumbTag);
-    }
-    breadcrumbTag.textContent = JSON.stringify({
-      "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      "itemListElement": breadcrumbItems.map((item, i) => ({
-        "@type": "ListItem",
-        "position": i + 1,
-        "name": item.name,
-        ...(item.url ? { item: item.url } : {}),
-      })),
-    });
-  }, [currentPage, activeRegion, activeCity]);
-  
   useEffect(() => {
     if (!loading && paginacaoAtiva && currentPage > totalPages && totalPages > 0) {
       goToPage(1);
@@ -588,28 +493,58 @@ Responda APENAS com JSON válido, sem markdown.`,
 const todayLabel = new Date().toLocaleDateString("pt-BR", { weekday:"short", day:"2-digit", month:"short", year:"numeric" });
     const regionLabel = REGIONS.find(r => r.id === activeRegion)?.label || "Todo o Estado";
 
-    const cityNameForSeo = activeCity ? (news.find(n => slugify(n.city) === activeCity)?.city || activeCity) : null;
-    const seoTitle = cityNameForSeo
-      ? `Notícias de ${cityNameForSeo}`
-      : activeRegion !== "todos"
-        ? `Notícias da ${regionLabel}`
-        : null;
-    const seoDescription = cityNameForSeo
-      ? `Últimas notícias de ${cityNameForSeo} e região — atualizado ao vivo pelo Circular Notícias RJ.`
-      : activeRegion !== "todos"
-        ? `Últimas notícias da ${regionLabel}, Rio de Janeiro — atualizado ao vivo pelo Circular Notícias RJ.`
-        : null;
-    const seoPath = cityNameForSeo
-      ? `/cidade/${activeCity}`
-      : activeRegion !== "todos"
-        ? `/regiao/${activeRegion}`
-        : currentPage > 1 ? `/pagina/${currentPage}` : "/";
+    // ─── SEO: única fonte de dados por rota (Estado, Região, Cidade, paginação) ──
+    // Consumida exclusivamente pelo <Seo>, que é quem escreve no <head>
+    // (title, description, canonical, Open Graph, Twitter e JSON-LD).
+    const SEO_SITE_URL = "https://www.circularnoticias.com.br";
+    const cityNameForSeo = activeCity
+      ? (Object.keys(CITY_TO_REGION).find(c => slugify(c) === activeCity) || activeCity)
+      : null;
+
+    let seoTitle, seoDescription, seoPath, seoBreadcrumbItems;
+
+    if (cityNameForSeo) {
+      seoTitle = `${cityNameForSeo} — Notícias | Circular Notícias RJ`;
+      seoDescription = `Acompanhe as últimas notícias de ${cityNameForSeo}, no Estado do Rio de Janeiro: política, segurança, saúde, economia e mais, atualizadas em tempo real pelo Circular Notícias RJ.`;
+      seoPath = `/cidade/${activeCity}`;
+      seoBreadcrumbItems = [
+        { name: "Início", url: `${SEO_SITE_URL}/` },
+        { name: regionLabel, url: `${SEO_SITE_URL}/regiao/${activeRegion}` },
+        { name: cityNameForSeo },
+      ];
+    } else if (activeRegion !== "todos") {
+      seoTitle = currentPage === 1
+        ? `${regionLabel} — Notícias | Circular Notícias RJ`
+        : `${regionLabel} — Notícias | Circular Notícias RJ — Página ${currentPage}`;
+      seoDescription = `Notícias da ${regionLabel}, no Estado do Rio de Janeiro, atualizadas em tempo real pelo Circular Notícias RJ.`;
+      seoPath = `/regiao/${activeRegion}`;
+      seoBreadcrumbItems = [
+        { name: "Início", url: `${SEO_SITE_URL}/` },
+        { name: regionLabel },
+      ];
+    } else {
+      seoTitle = currentPage === 1
+        ? "Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro"
+        : `Circular Notícias RJ — Tudo o que acontece no Estado do Rio de Janeiro — Página ${currentPage}`;
+      seoDescription = "Circular Notícias RJ — Portal de notícias do Estado do Rio de Janeiro. Tudo o que acontece no estado, por região e cidade, atualizado em tempo real.";
+      seoPath = currentPage === 1 ? "/" : `/pagina/${currentPage}`;
+      seoBreadcrumbItems = currentPage === 1
+        ? [{ name: "Início" }]
+        : [{ name: "Início", url: `${SEO_SITE_URL}/` }, { name: `Página ${currentPage}` }];
+    }
 
     const seoNoIndex = !loading && (activeRegion !== "todos" || !!activeCity) && cards.length === 0;
 
     return (
       <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" }}>
-        <Seo title={seoTitle} description={seoDescription} path={seoPath} noIndex={seoNoIndex} />
+        <Seo
+          title={seoTitle}
+          titleIsFull
+          description={seoDescription}
+          path={seoPath}
+          noIndex={seoNoIndex}
+          breadcrumbItems={seoBreadcrumbItems}
+        />
       <header style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)", padding:"0 16px", boxShadow:"0 2px 20px rgba(0,0,0,0.3)" }}>
         <div style={{ maxWidth:1100, margin:"0 auto" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingTop:14, paddingBottom:10 }}>
