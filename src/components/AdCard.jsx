@@ -1,7 +1,8 @@
 // AdCard — busca a campanha real via Supabase de publicidade (buscar_campanhas)
 // e renderiza um card visualmente consistente com o feed, identificado como
 // publicidade. Quando a campanha tem imagem, ela ocupa o card inteiro
-// (edge-to-edge). Sem campanha ativa, não renderiza nada.
+// (edge-to-edge). Sem campanha ativa (ou se o Supabase de anúncios estiver
+// fora do ar), não renderiza nada e nunca derruba o feed.
 
 import { useState, useEffect } from "react";
 import { buscarCampanha, registrarEvento } from "../lib/supabaseAdsClient.js";
@@ -11,23 +12,29 @@ export default function AdCard({ regiao = "*" }) {
 
   useEffect(() => {
     let mounted = true;
-    buscarCampanha(regiao).then((c) => {
-      if (mounted) setCampanha(c);
-    });
+    Promise.resolve(buscarCampanha(regiao))
+      .then((c) => {
+        if (mounted) setCampanha(c || null);
+      })
+      .catch(() => {
+        if (mounted) setCampanha(null);
+      });
     return () => {
       mounted = false;
     };
   }, [regiao]);
 
   useEffect(() => {
-    if (campanha) registrarEvento(campanha.id, "impressao", regiao);
+    if (campanha) {
+      Promise.resolve(registrarEvento(campanha.id, "impressao", regiao)).catch(() => {});
+    }
   }, [campanha]);
 
   if (campanha === undefined) return null;
   if (campanha === null) return null;
 
   const abrir = () => {
-    registrarEvento(campanha.id, "clique", regiao);
+    Promise.resolve(registrarEvento(campanha.id, "clique", regiao)).catch(() => {});
     if (!campanha.url_destino) return;
     if (campanha.url_destino.startsWith("/")) {
       window.location.href = campanha.url_destino;
@@ -66,7 +73,7 @@ export default function AdCard({ regiao = "*" }) {
     </span>
   );
 
-  // Card com imagem: a imagem preenche o card inteiro (edge-to-edge)
+  // Card com imagem: mostra a imagem inteira, sem cortar (object-fit contain)
   if (campanha.imagem_url) {
     return (
       <div
@@ -74,12 +81,12 @@ export default function AdCard({ regiao = "*" }) {
         role="link"
         tabIndex={0}
         onKeyDown={(e) => e.key === "Enter" && abrir()}
-        style={{ ...cardBase, aspectRatio: "16 / 10" }}
+        style={{ ...cardBase, aspectRatio: "16 / 10", background: "#0f172a" }}
       >
         <img
           src={campanha.imagem_url}
           alt={campanha.titulo}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
         />
         {selo}
       </div>
