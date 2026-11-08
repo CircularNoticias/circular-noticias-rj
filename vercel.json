@@ -6,6 +6,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/biblioteca/:slug/ler/:path*", "destination": "https://HOST-DO-PROJETO-BIBLIOTECA.vercel.app/:slug/:path*" },
+    { "source": "/biblioteca/:slug/books/:path*", "destination": "https://HOST-DO-PROJETO-BIBLIOTECA.vercel.app/:slug/books/:path*" },
     { "source": "/((?!api/|adicionar-fonte.html|remover-fonte.html|robots.txt|sitemap.xml).*)", "destination": "/index.html" }
   ]
 }
