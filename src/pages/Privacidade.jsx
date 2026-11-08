@@ -101,7 +101,6 @@ export default function Privacidade() {
         informações pessoais do usuário além do necessário ao funcionamento da plataforma, nem que endosse
         o produto ou serviço anunciado.
       </p>
-      <p>
 
       <h2 style={sectionStyle}>7. Serviços de terceiros</h2>
       <p>
@@ -235,4 +234,3 @@ export default function Privacidade() {
 
 const sectionStyle = { fontSize: 18, fontWeight: 700, color: "#1e293b", marginTop: 28, marginBottom: 10 };
 const linkStyle = { color: "#0ea5e9", fontWeight: 600, textDecoration: "none" };
-      
